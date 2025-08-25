@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body {
+    font-family: sans-serif;
+    line-height: 1.6;
+    color: #333;
+  }
+  .container {
+    width: 90%;
+    max-width: 600px;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+  }
+  .header {
+    padding: 10px;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+  }
+  .news-item {
+    border-bottom: 1px solid #eee;
+    padding: 15px 0;
+  }
+  .news-item:last-child {
+    border-bottom: none;
+  }
+  .title {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+  .comment pre {
+    font-style: italic;
+    color: #555;
+    margin-bottom: 15px;
+    white-space: pre-wrap;
+    font-family: sans-serif;
+  }
+  .images pre {
+    white-space: pre-wrap;
+    font-family: sans-serif;
+  }
+  .hashtags pre {
+    margin-top: 15px;
+    color: #007bff;
+    white-space: pre-wrap;
+    font-family: sans-serif;
+  }
+  .source {
+      font-size: 0.8em;
+      color: #777;
+      margin-top: 10px;
+  }
+  .footer {
+    margin-top: 20px;
+    font-size: 0.8em;
+    text-align: center;
+    color: #777;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Viral News Digest</h1>
+    </div>
+    <div class="content">
+      {{news_items}}
+    </div>
+    <div class="footer">
+      <p>&copy; 2025 The AI Point. All rights reserved.</p>
+      <p>Note: To copy any content, simply select the text and use your device's copy function.</p>
+    </div>
+  </div>
+</body>
+</html>
