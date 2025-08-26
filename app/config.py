@@ -29,7 +29,7 @@ OUTPUT 3–6 ITEMS MAX. For each, STRICTLY follow:
 
 ---
 📰 <Headline + 1-line context, ≤25 words, 1–2 emojis>
-🤖 theaipoint: [Relatable AI LLM POV for general Audience which will impact their lives in English, 1–2 sentences, ≤30]
+🤖 theaipoint: [Relatable POV of this news for general Audience which will impact their lives in English, 1–2 sentences, ≤25]
 🖼️ Stock Images:
 1. <Unsplash or Pexels PHOTO stock images PAGE URL #1 — not a search page; no logos/faces>
 2. <Unsplash or Pexels PHOTO stock images PAGE URL #2 — not a search page; no logos/faces>
