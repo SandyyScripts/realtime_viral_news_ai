@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import logging
+from app.build_posts import build_images_from_llm
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +24,13 @@ def run_job():
         logging.error("Failed to extract text from Perplexity response. Aborting job.")
         return
 
+    # # 2. Parse + Generate images
+    # try:
+    #     image_paths = build_images_from_llm(extracted_text, model_name=perplexity_response.get("model", "LLM"))
+    #     logging.info(f"Generated {len(image_paths)} images: {image_paths}")
+    # except Exception as e:
+    #     logging.error(f"Error generating images: {e}", exc_info=True)
+    #     image_paths = []
     # 2. Send the email
     send_email(EMAIL_SUBJECT, extracted_text)
     logging.info("--- Job finished ---")

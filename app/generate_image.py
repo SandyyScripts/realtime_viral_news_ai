@@ -1,147 +1,715 @@
-import os, io, re, asyncio, hashlib, logging, base64, textwrap, pathlib, requests
+import os, io, re, asyncio, logging, base64, textwrap, pathlib, requests
 from datetime import datetime
 from dateutil import tz
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from playwright.async_api import async_playwright
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
+import json
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- paths relative to this file (works no matter where you run it) ---
 HERE = pathlib.Path(__file__).resolve().parent
-TEMPLATES_DIR = HERE / "templates"          # expects post.html inside this folder
+TEMPLATES_DIR = HERE / "templates"
 OUTPUT_DIR = HERE / "output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-env = Environment(
-    loader=FileSystemLoader(str(TEMPLATES_DIR)),
-    autoescape=select_autoescape(["html"]),
-)
+# Enhanced themes with better color schemes and gradients
+THEMES: Dict[str, Dict[str, Any]] = {
+    "breaking": {
+        "brand": "#ff3b30", "accent": "#ff8a80", "brandDark": "#d32f2f", "accentDark": "#ff5722",
+        "ai_bg": "rgba(255,59,48,0.15)", "ai_fg": "#ffffff", "cta_bg": "rgba(255,59,48,0.25)",
+        "scrim_top": "rgba(0,0,0,.65)", "scrim_bottom": "rgba(0,0,0,.95)",
+        "icon": "🚨", "title": "Breaking", "gradient": ["#ff3b30", "#ff8a80", "#d32f2f"]
+    },
+    "economy": {
+        "brand": "#22c55e", "accent": "#16a34a", "brandDark": "#059669", "accentDark": "#047857",
+        "ai_bg": "rgba(34,197,94,0.18)", "ai_fg": "#effff2", "cta_bg": "rgba(34,197,94,0.28)",
+        "scrim_top": "rgba(0,0,0,.58)", "scrim_bottom": "rgba(0,0,0,.92)",
+        "icon": "💹", "title": "Economy", "gradient": ["#22c55e", "#16a34a", "#059669"]
+    },
+    "cricket": {
+        "brand": "#2563eb", "accent": "#1d4ed8", "brandDark": "#1e40af", "accentDark": "#1e3a8a",
+        "ai_bg": "rgba(37,99,235,0.20)", "ai_fg": "#eef3ff", "cta_bg": "rgba(37,99,235,0.28)",
+        "scrim_top": "rgba(0,0,0,.58)", "scrim_bottom": "rgba(0,0,0,.92)",
+        "icon": "🏏", "title": "Cricket", "gradient": ["#2563eb", "#1d4ed8", "#1e40af"]
+    },
+    "tech": {
+        "brand": "#a855f7", "accent": "#7e22ce", "brandDark": "#7c3aed", "accentDark": "#6b21a8",
+        "ai_bg": "rgba(168,85,247,0.20)", "ai_fg": "#fff0ff", "cta_bg": "rgba(168,85,247,0.28)",
+        "scrim_top": "rgba(0,0,0,.56)", "scrim_bottom": "rgba(0,0,0,.92)",
+        "icon": "🤖", "title": "Tech", "gradient": ["#a855f7", "#7e22ce", "#7c3aed"]
+    },
+    "politics": {
+        "brand": "#f59e0b", "accent": "#d97706", "brandDark": "#f97316", "accentDark": "#ea580c",
+        "ai_bg": "rgba(245,158,11,0.20)", "ai_fg": "#fff7e8", "cta_bg": "rgba(245,158,11,0.28)",
+        "scrim_top": "rgba(0,0,0,.58)", "scrim_bottom": "rgba(0,0,0,.92)",
+        "icon": "🗳️", "title": "Politics", "gradient": ["#f59e0b", "#d97706", "#f97316"]
+    },
+    "disaster": {
+        "brand": "#ef4444", "accent": "#b91c1c", "brandDark": "#dc2626", "accentDark": "#991b1b",
+        "ai_bg": "rgba(239,68,68,0.20)", "ai_fg": "#ffecec", "cta_bg": "rgba(239,68,68,0.28)",
+        "scrim_top": "rgba(0,0,0,.70)", "scrim_bottom": "rgba(0,0,0,.96)",
+        "icon": "⚠️", "title": "Alert", "gradient": ["#ef4444", "#b91c1c", "#dc2626"]
+    },
+    "default": {
+        "brand": "#00d4ff", "accent": "#22c1c3", "brandDark": "#0066cc", "accentDark": "#1a9a9e",
+        "ai_bg": "rgba(0,212,255,0.18)", "ai_fg": "#e9fbff", "cta_bg": "rgba(0,212,255,0.25)",
+        "scrim_top": "rgba(0,0,0,.58)", "scrim_bottom": "rgba(0,0,0,.92)",
+        "icon": "✨", "title": "Trending", "gradient": ["#00d4ff", "#22c1c3", "#0066cc"]
+    }
+}
 
-def _slugify(s: str) -> str:
-    s = s.lower()
-    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
-    return s[:60] or "post"
+def detect_category(title: str, hashtags: str = "", content: str = "") -> str:
+    """Enhanced category detection with content analysis"""
+    text = f"{title} {hashtags} {content}".lower()
+    
+    # Priority order matters - more specific first
+    if any(k in text for k in ["flood", "landslide", "earthquake", "cyclone", "disaster", "crash", "blast", "emergency", "alert", "warning"]): 
+        return "disaster"
+    if any(k in text for k in ["breaking", "urgent", "just in", "developing", "live"]): 
+        return "breaking"
+    if any(k in text for k in ["rupee", "inflation", "tariff", "budget", "economy", "jobs", "gdp", "stock market", "sensex", "nifty", "investment"]): 
+        return "economy"
+    if any(k in text for k in ["virat", "ipl", "cricket", "team india", "bcci", "world cup", "t20", "odi", "test match"]): 
+        return "cricket"
+    if any(k in text for k in ["ai ", "artificial intelligence", "iphone", "semiconductor", "chip", "tech", "startup", "android", "google", "apple", "meta", "openai"]): 
+        return "tech"
+    if any(k in text for k in ["election", "minister", "bjp", "congress", "parliament", "vote", "policy", "government", "political"]): 
+        return "politics"
+    
+    return "default"
+
+def _hex_to_rgb(hex_color: str) -> tuple:
+    """Convert hex color to RGB tuple"""
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+def _create_enhanced_gradient(colors: List[str], size: tuple = (1080, 1350)) -> bytes:
+    """Create a sophisticated gradient with noise and effects"""
+    w, h = size
+    
+    # Create base gradient
+    img = Image.new("RGB", (w, h))
+    draw = ImageDraw.Draw(img)
+    
+    # Multi-stop gradient
+    color_stops = [_hex_to_rgb(c) for c in colors]
+    
+    for y in range(h):
+        # Calculate position in gradient (0 to 1)
+        pos = y / h
+        
+        # Determine which colors to interpolate between
+        if pos <= 0.5:
+            # First half: color[0] to color[1]
+            t = pos * 2
+            start_color = color_stops[0]
+            end_color = color_stops[1] if len(color_stops) > 1 else color_stops[0]
+        else:
+            # Second half: color[1] to color[2]
+            t = (pos - 0.5) * 2
+            start_color = color_stops[1] if len(color_stops) > 1 else color_stops[0]
+            end_color = color_stops[2] if len(color_stops) > 2 else color_stops[-1]
+        
+        # Interpolate colors
+        r = int(start_color[0] + (end_color[0] - start_color[0]) * t)
+        g = int(start_color[1] + (end_color[1] - start_color[1]) * t)
+        b = int(start_color[2] + (end_color[2] - start_color[2]) * t)
+        
+        draw.line([(0, y), (w, y)], fill=(r, g, b))
+    
+    # Add subtle noise texture
+    noise_overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    noise_draw = ImageDraw.Draw(noise_overlay)
+    
+    import random
+    random.seed(42)  # Consistent noise pattern
+    for _ in range(w * h // 100):  # Sparse noise
+        x = random.randint(0, w-1)
+        y = random.randint(0, h-1)
+        alpha = random.randint(5, 15)
+        noise_draw.point((x, y), fill=(255, 255, 255, alpha))
+    
+    # Combine base gradient with noise
+    img = Image.alpha_composite(img.convert("RGBA"), noise_overlay)
+    
+    # Add radial vignette
+    vignette = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    vignette_draw = ImageDraw.Draw(vignette)
+    
+    # Create radial vignette effect
+    center_x, center_y = w // 2, h // 2
+    max_distance = ((w/2)**2 + (h/2)**2)**0.5
+    
+    for y in range(0, h, 4):  # Skip pixels for performance
+        for x in range(0, w, 4):
+            distance = ((x - center_x)**2 + (y - center_y)**2)**0.5
+            vignette_strength = min(1.0, (distance / max_distance) * 0.8)
+            alpha = int(vignette_strength * 60)  # Max 60 alpha
+            vignette_draw.rectangle([x, y, x+3, y+3], fill=(0, 0, 0, alpha))
+    
+    # Apply vignette
+    img = Image.alpha_composite(img, vignette)
+    
+    # Convert back to RGB and save
+    img = img.convert("RGB")
+    
+    # Enhance contrast slightly
+    enhancer = ImageEnhance.Contrast(img)
+    img = enhancer.enhance(1.1)
+    
+    # Save to bytes
+    output = io.BytesIO()
+    img.save(output, format="JPEG", quality=92)
+    return output.getvalue()
 
 def _image_to_data_uri(img_bytes: bytes) -> str:
+    """Convert image bytes to data URI"""
     return "data:image/jpeg;base64," + base64.b64encode(img_bytes).decode("ascii")
 
-def _cover_resize(img: Image.Image, size=(1080, 1350)) -> Image.Image:
-    tw, th = size
-    sw, sh = img.size
-    tr = tw / th
-    sr = sw / sh
-    if sr > tr:
-        nh = th
-        nw = int(sr * nh)
-    else:
-        nw = tw
-        nh = int(nw / sr)
-    img = img.resize((nw, nh), Image.LANCZOS)
-    left = (nw - tw) // 2
-    top = (nh - th) // 2
-    return img.crop((left, top, left + tw, top + th))
+def _cover_resize(img: Image.Image, size: tuple = (1080, 1350)) -> Image.Image:
+    """Resize image to cover the given size maintaining aspect ratio"""
+    target_width, target_height = size
+    source_width, source_height = img.size
+    
+    # Calculate scaling factor to cover the target area
+    scale_x = target_width / source_width
+    scale_y = target_height / source_height
+    scale = max(scale_x, scale_y)  # Use max to cover (crop excess)
+    
+    # Calculate new dimensions
+    new_width = int(source_width * scale)
+    new_height = int(source_height * scale)
+    
+    # Resize image
+    img = img.resize((new_width, new_height), Image.LANCZOS)
+    
+    # Calculate crop coordinates (center crop)
+    left = (new_width - target_width) // 2
+    top = (new_height - target_height) // 2
+    right = left + target_width
+    bottom = top + target_height
+    
+    return img.crop((left, top, right, bottom))
 
 def _download_photo_bytes(url: str) -> Optional[bytes]:
-    """Resolve Unsplash/Pexels photo page to actual image bytes."""
-    headers = {"User-Agent": "Mozilla/5.0 theaipoint/1.0"}
+    """Download image from URL with better error handling"""
+    if not url or not url.startswith(('http://', 'https://')):
+        return None
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 theaipoint/2.0",
+        "Accept": "image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache"
+    }
+    
     try:
+        # Handle Unsplash URLs
         if "unsplash.com/photos/" in url:
-            dl = url.rstrip("/") + "/download?force=true"
-            r = requests.get(dl, headers=headers, timeout=20)
-            if r.ok and r.headers.get("content-type", "").startswith("image/"):
-                return r.content
+            download_url = url.rstrip("/") + "/download?force=true&w=1080"
+            logging.info(f"Downloading Unsplash image: {download_url}")
+            response = requests.get(download_url, headers=headers, timeout=15, stream=True)
+            if response.ok and response.headers.get("content-type", "").startswith("image/"):
+                return response.content
+        
+        # Handle Pexels URLs
         elif "pexels.com/photo/" in url:
-            html = requests.get(url, headers=headers, timeout=20).text
-            m = re.search(r'<meta property="og:image" content="([^"]+)"', html)
-            if m:
-                img_url = m.group(1)
-                r = requests.get(img_url, headers=headers, timeout=20)
-                if r.ok and r.headers.get("content-type", "").startswith("image/"):
-                    return r.content
+            logging.info(f"Processing Pexels URL: {url}")
+            page_response = requests.get(url, headers=headers, timeout=15)
+            if page_response.ok:
+                # Extract high-res image URL from page
+                import re
+                og_image_match = re.search(r'<meta property="og:image" content="([^"]+)"', page_response.text)
+                if og_image_match:
+                    img_url = og_image_match.group(1)
+                    img_response = requests.get(img_url, headers=headers, timeout=15)
+                    if img_response.ok and img_response.headers.get("content-type", "").startswith("image/"):
+                        return img_response.content
+        
+        # Handle direct image URLs
+        else:
+            logging.info(f"Downloading direct image: {url}")
+            response = requests.get(url, headers=headers, timeout=15, stream=True)
+            if response.ok and response.headers.get("content-type", "").startswith("image/"):
+                return response.content
+                
     except Exception as e:
-        logging.warning(f"Could not fetch {url}: {e}")
+        logging.warning(f"Failed to download image from {url}: {e}")
+    
     return None
 
-def _pick_background_data_uri(photo_urls: List[str]) -> str:
-    for u in photo_urls:
-        b = _download_photo_bytes(u)
-        if not b:
+def _process_background_image(image_urls: List[str], theme: Dict[str, Any]) -> str:
+    """Process background image with fallback to enhanced gradient"""
+    
+    # Try each image URL
+    for url in (image_urls or []):
+        if not url:
             continue
+            
+        logging.info(f"Attempting to download: {url}")
+        image_bytes = _download_photo_bytes(url)
+        
+        if not image_bytes:
+            continue
+            
         try:
-            im = Image.open(io.BytesIO(b)).convert("RGB")
-            im = _cover_resize(im, (1080, 1350))
-            out = io.BytesIO()
-            im.save(out, format="JPEG", quality=90)
-            return _image_to_data_uri(out.getvalue())
+            # Process the image
+            img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            img = _cover_resize(img, (1080, 1350))
+            
+            # Apply subtle enhancements
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(1.05)
+            
+            enhancer = ImageEnhance.Color(img)
+            img = enhancer.enhance(1.1)
+            
+            # Save processed image
+            output = io.BytesIO()
+            img.save(output, format="JPEG", quality=88)
+            
+            logging.info("Successfully processed background image")
+            return _image_to_data_uri(output.getvalue())
+            
         except Exception as e:
-            logging.warning(f"Image processing failed for {u}: {e}")
-    # dark fallback
-    fallback = Image.new("RGB", (1080, 1350), (18, 18, 22))
-    out = io.BytesIO()
-    fallback.save(out, format="JPEG", quality=85)
-    return _image_to_data_uri(out.getvalue())
+            logging.warning(f"Failed to process image: {e}")
+            continue
+    
+    # Fallback to enhanced gradient
+    logging.info("Using enhanced gradient fallback")
+    gradient_bytes = _create_enhanced_gradient(theme["gradient"])
+    return _image_to_data_uri(gradient_bytes)
 
-async def _render_html_to_image(html_str: str, out_path: pathlib.Path):
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page(
-            viewport={"width": 1080, "height": 1350, "deviceScaleFactor": 2}
+def _generate_smart_cta(category: str, title: str) -> str:
+    """Generate contextually relevant CTA text"""
+    title_lower = title.lower()
+    
+    cta_options = {
+        "economy": [
+            "💬 Impact on your wallet?",
+            "📊 What's your take?",
+            "💰 Share your thoughts",
+            "📈 Good or bad news?"
+        ],
+        "cricket": [
+            "🏏 Who's your MOTM?",
+            "🔥 Rate this performance",
+            "🎯 Your prediction?",
+            "⭐ Share your views"
+        ],
+        "tech": [
+            "🤖 Game changer or hype?",
+            "💡 Your thoughts?",
+            "🚀 Excited or worried?",
+            "⚡ What's your take?"
+        ],
+        "politics": [
+            "🗳️ Agree or disagree?",
+            "🎯 Your take on this?",
+            "💭 What do you think?",
+            "📊 Good move or not?"
+        ],
+        "disaster": [
+            "🙏 Stay safe everyone",
+            "❤️ Thoughts and prayers",
+            "🆘 Share safety tips",
+            "💪 How can we help?"
+        ],
+        "breaking": [
+            "⚡ Your instant reaction?",
+            "🔥 What's your view?",
+            "💥 Thoughts on this?",
+            "⭐ Share your POV"
+        ],
+        "default": [
+            "💭 What's your POV?",
+            "🎯 Share your thoughts",
+            "💬 Your take on this?",
+            "⭐ What do you think?"
+        ]
+    }
+    
+    # Get category-specific options
+    options = cta_options.get(category, cta_options["default"])
+    
+    # Simple selection logic (could be made smarter)
+    import hashlib
+    seed = int(hashlib.md5(title.encode()).hexdigest()[:8], 16)
+    return options[seed % len(options)]
+
+def _get_ist_timestamp() -> str:
+    """Get current timestamp in IST"""
+    now_utc = datetime.utcnow().replace(tzinfo=tz.UTC)
+    ist_timezone = tz.gettz("Asia/Kolkata")
+    ist_time = now_utc.astimezone(ist_timezone)
+    return ist_time.strftime("%d %b %Y, %I:%M %p IST")
+
+def _determine_headline_size(title: str) -> str:
+    """Determine appropriate headline size based on title length"""
+    length = len(title)
+    if length < 50:
+        return "h-xl"
+    elif length < 70:
+        return "h-lg"
+    elif length < 90:
+        return "h-md"
+    else:
+        return "h-sm"
+
+async def _render_html_to_image(html_content: str, output_path: pathlib.Path) -> None:
+    """Render HTML to image using Playwright"""
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-dev-shm-usage']
         )
-        await page.set_content(html_str, wait_until="load")
-        await page.wait_for_timeout(300)
-        await page.screenshot(path=str(out_path), type="jpeg", quality=90)
-        await browser.close()
+        
+        try:
+            page = await browser.new_page(
+                viewport={"width": 1080, "height": 1350, "deviceScaleFactor": 2}
+            )
+            
+            # Set content and wait for everything to load
+            await page.set_content(html_content, wait_until="networkidle")
+            
+            # Wait a bit more for any animations/effects
+            await page.wait_for_timeout(500)
+            
+            # Take screenshot
+            await page.screenshot(
+                path=str(output_path),
+                type="jpeg",
+                quality=90,
+                full_page=False
+            )
+            
+            logging.info(f"Successfully rendered image: {output_path}")
+            
+        finally:
+            await browser.close()
 
 def make_post_image(
     title: str,
     pov: str,
-    image_urls: List[str],
-    hashtags: str,
-    model_name: str,
-    category: str = "trending",
+    image_urls: List[str] = None,
+    hashtags: str = "",
+    model_name: str = "claude",
+    category: Optional[str] = None,
+    cta_text: Optional[str] = None,
+    output_filename: Optional[str] = None
 ) -> str:
-    bg_data_uri = _pick_background_data_uri(image_urls)
+    """
+    Generate a professional social media post image
+    
+    Args:
+        title: Main headline text
+        pov: AI Point of View (the key insight)
+        image_urls: List of image URLs to try as background
+        hashtags: Hashtags for category detection
+        model_name: Name of the AI model used
+        category: Override category detection
+        cta_text: Custom CTA text
+        output_filename: Custom output filename
+    
+    Returns:
+        Path to the generated image file
+    """
+    
+    try:
+        # Detect category
+        detected_category = category or detect_category(title, hashtags, pov)
+        theme = THEMES.get(detected_category, THEMES["default"])
+        
+        logging.info(f"Generating post for category: {detected_category}")
+        
+        # Process content
+        title_clean = title.strip()
+        pov_clean = textwrap.shorten((pov or "").strip(), width=180, placeholder="…")
+        
+        # Get background
+        background_data_uri = _process_background_image(image_urls or [], theme)
+        
+        # Generate smart CTA
+        if not cta_text:
+            cta_text = _generate_smart_cta(detected_category, title_clean)
+        
+        # Get timestamp
+        timestamp_ist = _get_ist_timestamp()
+        
+        # Determine headline size
+        headline_size = _determine_headline_size(title_clean)
+        
+        # Create filename
+        if not output_filename:
+            slug = re.sub(r"[^a-z0-9]+", "-", title_clean.lower())
+            slug = slug.strip("-")[:50] or "post"
+            output_filename = f"{slug}-{detected_category}.jpg"
+        
+        output_path = OUTPUT_DIR / output_filename
+        
+        # Generate HTML
+        html_template = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>theaipoint - Social Post</title>
+    <style>
+        :root {
+            --w: 1080px; --h: 1350px; --pad: 48px;
+            --brand: {{ theme.brand }}; --accent: {{ theme.accent }};
+            --brandDark: {{ theme.brandDark }}; --accentDark: {{ theme.accentDark }};
+            --fg: #ffffff; --fgMuted: #d1d5db; --fgSecondary: #9ca3af;
+            --bgOverlay: rgba(0, 0, 0, 0.75); --bgCard: rgba(255, 255, 255, 0.1);
+            --shadowStrong: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadowMedium: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.2);
+            --shadowText: 0 2px 8px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        html, body {
+            width: var(--w); height: var(--h);
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            color: var(--fg); background: #000; overflow: hidden;
+            -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+        }
+        
+        .bg-container { position: absolute; inset: 0; overflow: hidden; }
+        .bg-image {
+            position: absolute; inset: 0;
+            background: url("{{ background_data_uri }}") center/cover no-repeat;
+            filter: brightness(0.8) contrast(1.1);
+        }
+        
+        .overlay {
+            position: absolute; inset: 0;
+            background: linear-gradient(180deg, 
+                rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 20%, 
+                rgba(0, 0, 0, 0.3) 60%, rgba(0, 0, 0, 0.8) 100%);
+        }
+        
+        .container {
+            position: relative; width: 100%; height: 100%; padding: var(--pad);
+            display: flex; flex-direction: column; z-index: 10;
+        }
+        
+        .header {
+            display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px;
+        }
+        
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand-dot {
+            width: 16px; height: 16px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--brand), var(--accent));
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1), 0 4px 12px var(--brand);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1), 0 4px 12px var(--brand); }
+            50% { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2), 0 4px 16px var(--brand); }
+        }
+        
+        .brand-text {
+            font-weight: 900; font-size: 24px; letter-spacing: -0.5px;
+            text-shadow: var(--shadowText);
+            background: linear-gradient(135deg, #fff, var(--fgMuted));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        
+        .tagline {
+            font-size: 16px; color: var(--fgMuted); font-weight: 500;
+            margin-top: 2px; text-shadow: var(--shadowText);
+        }
+        
+        .badge {
+            background: linear-gradient(135deg, var(--brand), var(--accent));
+            color: #fff; padding: 10px 16px; border-radius: 12px;
+            font-weight: 800; font-size: 14px; letter-spacing: 0.5px;
+            text-transform: uppercase; box-shadow: var(--shadowMedium);
+        }
+        
+        .main {
+            flex: 1; display: flex; flex-direction: column;
+            justify-content: center; gap: 24px; margin: 32px 0;
+        }
+        
+        .headline {
+            font-weight: 900; line-height: 1.1; text-shadow: var(--shadowText);
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #fff 0%, var(--fgMuted) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        
+        .h-xl { font-size: 72px; letter-spacing: -1px; }
+        .h-lg { font-size: 64px; letter-spacing: -0.5px; }
+        .h-md { font-size: 56px; letter-spacing: -0.3px; }
+        .h-sm { font-size: 48px; letter-spacing: -0.2px; }
+        
+        .ai-point {
+            background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 20px;
+            padding: 24px; margin: 16px 0; position: relative;
+            box-shadow: var(--shadowStrong); border-left: 6px solid var(--brand);
+        }
+        
+        .ai-label {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+        }
+        
+        .ai-icon { font-size: 20px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3)); }
+        .ai-label-text {
+            font-weight: 800; font-size: 18px; color: var(--brand);
+            text-transform: uppercase; letter-spacing: 1px; text-shadow: var(--shadowText);
+        }
+        
+        .ai-content {
+            font-size: 28px; font-weight: 600; line-height: 1.3;
+            color: var(--fg); text-shadow: var(--shadowText);
+        }
+        
+        .metadata {
+            display: flex; align-items: center; gap: 16px;
+            color: var(--fgSecondary); font-size: 18px; font-weight: 500;
+            text-shadow: var(--shadowText);
+        }
+        
+        .metadata-item { display: flex; align-items: center; gap: 6px; }
+        
+        .footer {
+            display: flex; justify-content: space-between; align-items: flex-end; margin-top: 32px;
+        }
+        
+        .signature {
+            font-size: 16px; color: var(--fgSecondary); text-shadow: var(--shadowText);
+        }
+        
+        .signature strong { color: var(--fg); font-weight: 800; }
+        .source { font-size: 14px; color: var(--fgSecondary); text-align: right; text-shadow: var(--shadowText); }
+        
+        .cta {
+            position: absolute; bottom: var(--pad); left: var(--pad); right: var(--pad);
+            display: flex; justify-content: space-between; align-items: center; gap: 16px;
+        }
+        
+        .cta-button {
+            background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 16px;
+            padding: 16px 20px; color: var(--fg); font-weight: 800; font-size: 20px;
+            text-shadow: var(--shadowText); box-shadow: var(--shadowMedium);
+            flex: 1; text-align: center;
+        }
+        
+        .cta-brand {
+            color: var(--fgMuted); font-weight: 700; font-size: 16px; text-shadow: var(--shadowText);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-container">
+        <div class="bg-image"></div>
+        <div class="overlay"></div>
+    </div>
+    
+    <div class="container">
+        <header class="header">
+            <div class="brand">
+                <div class="brand-dot"></div>
+                <div>
+                    <div class="brand-text">theaipoint</div>
+                    <div class="tagline">news + ai perspective</div>
+                </div>
+            </div>
+            <div class="badge">AI RECAP</div>
+        </header>
+        
+        <main class="main">
+            <h1 class="headline {{ headline_size }}">{{ title }}</h1>
+            
+            <div class="ai-point">
+                <div class="ai-label">
+                    <span class="ai-icon">{{ icon }}</span>
+                    <span class="ai-label-text">AI Point</span>
+                </div>
+                <div class="ai-content">{{ pov }}</div>
+            </div>
+            
+            <div class="metadata">
+                <div class="metadata-item">
+                    <span>⏱️</span>
+                    <span>{{ timestamp_ist }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span>📊</span>
+                    <span>{{ category_title }}</span>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="footer">
+            <div class="signature">
+                <strong>@theaipoint</strong> — AI news in 30 sec
+            </div>
+            <div class="source">
+                Source: AI ({{ model_name }})
+            </div>
+        </footer>
+        
+        <div class="cta">
+            <div class="cta-button">{{ cta_text }}</div>
+            <div class="cta-brand">@theaipoint</div>
+        </div>
+    </div>
+</body>
+</html>
+"""
+        
+        # Use Jinja2 to render template
+        from jinja2 import Template
+        template = Template(html_template)
+        
+        html_content = template.render(
+            title=title_clean,
+            pov=pov_clean,
+            background_data_uri=background_data_uri,
+            model_name=model_name,
+            timestamp_ist=timestamp_ist,
+            category=detected_category,
+            category_title=theme["title"],
+            cta_text=cta_text,
+            headline_size=headline_size,
+            icon=theme["icon"],
+            theme=theme
+        )
+        
+        # Render to image
+        asyncio.run(_render_html_to_image(html_content, output_path))
+        
+        logging.info(f"Successfully generated social media post: {output_path}")
+        return str(output_path)
+        
+    except Exception as e:
+        logging.error(f"Error generating post image: {e}")
+        raise
 
-    now_utc = datetime.utcnow().replace(tzinfo=tz.UTC)
-    ist = tz.gettz("Asia/Kolkata")
-    ts_ist = now_utc.astimezone(ist).strftime("%d %b %Y, %I:%M %p IST")
-
-    template = env.get_template("post.html")
-    html_rendered = template.render(
-        title=title.strip(),
-        pov=textwrap.shorten(pov.strip(), width=180, placeholder="…"),
-        background_data_uri=bg_data_uri,
-        hashtags=hashtags.strip(),
-        model_name=model_name,
-        timestamp_ist=ts_ist,
-        category=category,
-    )
-
-    slug = _slugify(title)
-    out_img = OUTPUT_DIR / f"{slug}.jpg"
-    asyncio.run(_render_html_to_image(html_rendered, out_img))
-    logging.info(f"Saved: {out_img}")
-    return str(out_img)
-
-# --- quick manual test ---
+# Example usage
 if __name__ == "__main__":
-    item = {
-        "title": "Rupee slides to ₹84.6/$ — travel & iPhones get pricier 💸",
-        "pov": "Dollar up, wallet down. Expect pricier imports and OTT subscriptions.",
-        "images": [
-            "https://unsplash.com/photos/8manzosRGPE",
-            "https://www.pexels.com/photo/close-up-photography-of-indian-rupee-banknotes-164686/",
+    # Test with sample data
+    test_data = {
+        "title": "Breaking: AI chatbot solves climate change with revolutionary carbon capture method 🌍⚡",
+        "pov": "This breakthrough could transform how we tackle environmental challenges, showing AI's potential beyond just conversation.",
+        "image_urls": [
+            "https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?q=80&w=2070",
+            # Fallback will be used if this fails
         ],
-        "hashtags": "#rupee #economy #financeindia #dollar #inflation #moneymatters #trendingindia",
-        "model_name": "sonar-online",
+        "hashtags": "#AI #ClimateChange #TechNews #Innovation",
+        "model_name": "claude-sonnet-4",
+        "category": "tech"
     }
-    make_post_image(
-        title=item["title"],
-        pov=item["pov"],
-        image_urls=item["images"],
-        hashtags=item["hashtags"],
-        model_name=item["model_name"],
-        category="finance",
-    )
+    
+    result = make_post_image(**test_data)
+    print(f"Generated image: {result}")
