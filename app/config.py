@@ -30,9 +30,9 @@ OUTPUT 3–6 ITEMS MAX. For each, STRICTLY follow:
 ---
 📰 <Headline + 1-line context, ≤25 words, 1–2 emojis>
 🤖 theaipoint: [Relatable POV of this news for general Audience which will impact their lives in English, 1–2 sentences, ≤25]
-🖼️ Stock Images:
-1. <Unsplash or Pexels PHOTO stock images PAGE URL #1 — not a search page; no logos/faces>
-2. <Unsplash or Pexels PHOTO stock images PAGE URL #2 — not a search page; no logos/faces>
+🖼️ Stock Images:  
+1. <Unsplash PHOTO page URL that visually represents the topic (finance → charts/markets; cricket → stadium/action; tech → chips/servers; politics → parliament/buildings; disasters → nature scenes). No people, no logos.>  
+2. <Backup Unsplash PHOTO page URL for same theme, different angle>  
 
 #️⃣ Hashtags:
 - Instagram: <7–10 tags; mix trending + niche; lowercase; no spaces>

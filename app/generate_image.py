@@ -454,216 +454,164 @@ def make_post_image(
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>theaipoint - Social Post</title>
-    <style>
-        :root {
-            --w: 1080px; --h: 1350px; --pad: 48px;
-            --brand: {{ theme.brand }}; --accent: {{ theme.accent }};
-            --brandDark: {{ theme.brandDark }}; --accentDark: {{ theme.accentDark }};
-            --fg: #ffffff; --fgMuted: #d1d5db; --fgSecondary: #9ca3af;
-            --bgOverlay: rgba(0, 0, 0, 0.75); --bgCard: rgba(255, 255, 255, 0.1);
-            --shadowStrong: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.3);
-            --shadowMedium: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.2);
-            --shadowText: 0 2px 8px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.5);
-        }
-        
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        
-        html, body {
-            width: var(--w); height: var(--h);
-            font-family: 'Inter', -apple-system, system-ui, sans-serif;
-            color: var(--fg); background: #000; overflow: hidden;
-            -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
-        }
-        
-        .bg-container { position: absolute; inset: 0; overflow: hidden; }
-        .bg-image {
-            position: absolute; inset: 0;
-            background: url("{{ background_data_uri }}") center/cover no-repeat;
-            filter: brightness(0.8) contrast(1.1);
-        }
-        
-        .overlay {
-            position: absolute; inset: 0;
-            background: linear-gradient(180deg, 
-                rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 20%, 
-                rgba(0, 0, 0, 0.3) 60%, rgba(0, 0, 0, 0.8) 100%);
-        }
-        
-        .container {
-            position: relative; width: 100%; height: 100%; padding: var(--pad);
-            display: flex; flex-direction: column; z-index: 10;
-        }
-        
-        .header {
-            display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px;
-        }
-        
-        .brand { display: flex; align-items: center; gap: 12px; }
-        .brand-dot {
-            width: 16px; height: 16px; border-radius: 50%;
-            background: linear-gradient(135deg, var(--brand), var(--accent));
-            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1), 0 4px 12px var(--brand);
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1), 0 4px 12px var(--brand); }
-            50% { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2), 0 4px 16px var(--brand); }
-        }
-        
-        .brand-text {
-            font-weight: 900; font-size: 24px; letter-spacing: -0.5px;
-            text-shadow: var(--shadowText);
-            background: linear-gradient(135deg, #fff, var(--fgMuted));
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
-        
-        .tagline {
-            font-size: 16px; color: var(--fgMuted); font-weight: 500;
-            margin-top: 2px; text-shadow: var(--shadowText);
-        }
-        
-        .badge {
-            background: linear-gradient(135deg, var(--brand), var(--accent));
-            color: #fff; padding: 10px 16px; border-radius: 12px;
-            font-weight: 800; font-size: 14px; letter-spacing: 0.5px;
-            text-transform: uppercase; box-shadow: var(--shadowMedium);
-        }
-        
-        .main {
-            flex: 1; display: flex; flex-direction: column;
-            justify-content: center; gap: 24px; margin: 32px 0;
-        }
-        
-        .headline {
-            font-weight: 900; line-height: 1.1; text-shadow: var(--shadowText);
-            margin-bottom: 8px;
-            background: linear-gradient(135deg, #fff 0%, var(--fgMuted) 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
-        
-        .h-xl { font-size: 72px; letter-spacing: -1px; }
-        .h-lg { font-size: 64px; letter-spacing: -0.5px; }
-        .h-md { font-size: 56px; letter-spacing: -0.3px; }
-        .h-sm { font-size: 48px; letter-spacing: -0.2px; }
-        
-        .ai-point {
-            background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 20px;
-            padding: 24px; margin: 16px 0; position: relative;
-            box-shadow: var(--shadowStrong); border-left: 6px solid var(--brand);
-        }
-        
-        .ai-label {
-            display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
-        }
-        
-        .ai-icon { font-size: 20px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3)); }
-        .ai-label-text {
-            font-weight: 800; font-size: 18px; color: var(--brand);
-            text-transform: uppercase; letter-spacing: 1px; text-shadow: var(--shadowText);
-        }
-        
-        .ai-content {
-            font-size: 28px; font-weight: 600; line-height: 1.3;
-            color: var(--fg); text-shadow: var(--shadowText);
-        }
-        
-        .metadata {
-            display: flex; align-items: center; gap: 16px;
-            color: var(--fgSecondary); font-size: 18px; font-weight: 500;
-            text-shadow: var(--shadowText);
-        }
-        
-        .metadata-item { display: flex; align-items: center; gap: 6px; }
-        
-        .footer {
-            display: flex; justify-content: space-between; align-items: flex-end; margin-top: 32px;
-        }
-        
-        .signature {
-            font-size: 16px; color: var(--fgSecondary); text-shadow: var(--shadowText);
-        }
-        
-        .signature strong { color: var(--fg); font-weight: 800; }
-        .source { font-size: 14px; color: var(--fgSecondary); text-align: right; text-shadow: var(--shadowText); }
-        
-        .cta {
-            position: absolute; bottom: var(--pad); left: var(--pad); right: var(--pad);
-            display: flex; justify-content: space-between; align-items: center; gap: 16px;
-        }
-        
-        .cta-button {
-            background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 16px;
-            padding: 16px 20px; color: var(--fg); font-weight: 800; font-size: 20px;
-            text-shadow: var(--shadowText); box-shadow: var(--shadowMedium);
-            flex: 1; text-align: center;
-        }
-        
-        .cta-brand {
-            color: var(--fgMuted); font-weight: 700; font-size: 16px; text-shadow: var(--shadowText);
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>theaipoint - Social Post</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;800&family=Inter:wght@400;500;600&family=DM+Sans:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --w: 1080px; --h: 1350px; --pad: 48px;
+      --brand: {{ theme.brand }}; --accent: {{ theme.accent }};
+      --brandDark: {{ theme.brandDark }}; --accentDark: {{ theme.accentDark }};
+      --fg: #ffffff; --fgMuted: #d1d5db; --fgSecondary: #9ca3af;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: var(--w); height: var(--h);
+      font-family: 'Inter', sans-serif;
+      color: var(--fg); background: #000; overflow: hidden;
+      -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    }
+
+    .bg-container { position: absolute; inset: 0; overflow: hidden; }
+    .bg-image {
+      position: absolute; inset: 0;
+      background: url("{{ background_data_uri }}") center/cover no-repeat;
+      filter: brightness(0.75) contrast(1.1);
+    }
+    .overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg,
+        rgba(0,0,0,0.5) 0%,
+        rgba(0,0,0,0.25) 30%,
+        rgba(0,0,0,0.4) 70%,
+        rgba(0,0,0,0.85) 100%);
+    }
+
+    .container {
+      position: relative; width: 100%; height: 100%; padding: var(--pad);
+      display: flex; flex-direction: column; z-index: 10;
+    }
+
+    /* Branding */
+    .header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;
+    }
+    .brand {
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .brand-text {
+      font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 32px;
+      color: #fff; letter-spacing: -0.5px; text-shadow: 0 3px 6px rgba(0,0,0,0.6);
+    }
+    .tagline {
+      font-family: 'Inter', sans-serif; font-size: 16px; color: var(--fgSecondary);
+    }
+    .badge {
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      color: #fff; padding: 8px 14px; border-radius: 12px;
+      font-weight: 600; font-family: 'DM Sans', sans-serif; font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    /* Headline */
+    .headline {
+      font-family: 'Outfit', sans-serif; font-weight: 800; line-height: 1.1;
+      color: #fff; text-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      margin-bottom: 20px;
+    }
+    .h-xl { font-size: 72px; }
+    .h-lg { font-size: 64px; }
+    .h-md { font-size: 54px; }
+    .h-sm { font-size: 44px; }
+
+    /* AI POV Glassmorphism Card */
+    .ai-point {
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+      padding: 22px 26px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .ai-label {
+      font-family: 'DM Sans', sans-serif; font-size: 15px;
+      font-weight: 600; color: var(--brand); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .ai-content {
+      font-family: 'Inter', sans-serif; font-size: 24px; font-weight: 500;
+      line-height: 1.35; color: #fff;
+    }
+
+    /* Metadata */
+    .metadata {
+      display: flex; align-items: center; gap: 20px;
+      color: var(--fgMuted); font-family: 'Inter', sans-serif;
+      font-size: 16px; margin-top: auto;
+    }
+
+    /* Footer */
+    .footer {
+      display: flex; justify-content: space-between; align-items: center; margin-top: 28px;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--fgSecondary);
+    }
+
+    /* CTA Button */
+    .cta {
+      position: absolute; bottom: var(--pad); left: 0; right: 0;
+      display: flex; justify-content: center;
+    }
+    .cta-button {
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      color: #fff; padding: 16px 28px;
+      font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 18px;
+      border-radius: 50px; box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+  </style>
 </head>
 <body>
-    <div class="bg-container">
-        <div class="bg-image"></div>
-        <div class="overlay"></div>
+  <div class="bg-container">
+    <div class="bg-image"></div>
+    <div class="overlay"></div>
+  </div>
+
+  <div class="container">
+    <header class="header">
+      <div class="brand">
+        <div class="brand-text">theaipoint</div>
+        <div class="tagline">news + ai perspective</div>
+      </div>
+      <div class="badge">AI RECAP</div>
+    </header>
+
+    <main>
+      <h1 class="headline {{ headline_size }}">{{ title }}</h1>
+
+      <div class="ai-point">
+        <div class="ai-label">✨ AI Point</div>
+        <div class="ai-content">{{ pov }}</div>
+      </div>
+
+      <div class="metadata">
+        <span>⏱️ {{ timestamp_ist }}</span>
+        <span>📊 {{ category_title }}</span>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <span><strong>@theaipoint</strong> — AI news in 30 sec</span>
+      <span>Source: AI ({{ model_name }})</span>
+    </footer>
+
+    <div class="cta">
+      <div class="cta-button">💬 {{ cta_text }}</div>
     </div>
-    
-    <div class="container">
-        <header class="header">
-            <div class="brand">
-                <div class="brand-dot"></div>
-                <div>
-                    <div class="brand-text">theaipoint</div>
-                    <div class="tagline">news + ai perspective</div>
-                </div>
-            </div>
-            <div class="badge">AI RECAP</div>
-        </header>
-        
-        <main class="main">
-            <h1 class="headline {{ headline_size }}">{{ title }}</h1>
-            
-            <div class="ai-point">
-                <div class="ai-label">
-                    <span class="ai-icon">{{ icon }}</span>
-                    <span class="ai-label-text">AI Point</span>
-                </div>
-                <div class="ai-content">{{ pov }}</div>
-            </div>
-            
-            <div class="metadata">
-                <div class="metadata-item">
-                    <span>⏱️</span>
-                    <span>{{ timestamp_ist }}</span>
-                </div>
-                <div class="metadata-item">
-                    <span>📊</span>
-                    <span>{{ category_title }}</span>
-                </div>
-            </div>
-        </main>
-        
-        <footer class="footer">
-            <div class="signature">
-                <strong>@theaipoint</strong> — AI news in 30 sec
-            </div>
-            <div class="source">
-                Source: AI ({{ model_name }})
-            </div>
-        </footer>
-        
-        <div class="cta">
-            <div class="cta-button">{{ cta_text }}</div>
-            <div class="cta-brand">@theaipoint</div>
-        </div>
-    </div>
+  </div>
 </body>
 </html>
 """
