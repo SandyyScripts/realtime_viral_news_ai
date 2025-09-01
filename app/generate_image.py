@@ -586,7 +586,7 @@ def make_post_image(
         <div class="brand-text">theaipoint</div>
         <div class="tagline">news + ai perspective</div>
       </div>
-      <div class="badge">AI RECAP</div>
+      <div class="badge">AI Point</div>
     </header>
 
     <main>
@@ -609,7 +609,7 @@ def make_post_image(
     </footer>
 
     <div class="cta">
-      <div class="cta-button">💬 {{ cta_text }}</div>
+      <div class="cta-button">{{ cta_text }}</div>
     </div>
   </div>
 </body>

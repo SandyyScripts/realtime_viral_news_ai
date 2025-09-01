@@ -7,7 +7,9 @@ load_dotenv()
 
 from app.config import PROMPT, EMAIL_SUBJECT
 from app.services.perplexity_service import call_perplexity, extract_text
-from app.services.email_service import send_email
+# from app.services.email_service import send_email
+from app.parser.news_parser import parse_news_content
+from app.services.news_emailer import send_email
 
 def run_job():
     """The main job to be scheduled."""
@@ -24,16 +26,13 @@ def run_job():
         logging.error("Failed to extract text from Perplexity response. Aborting job.")
         return
 
-    # # 2. Parse + Generate images
-    # try:
-    #     image_paths = build_images_from_llm(extracted_text, model_name=perplexity_response.get("model", "LLM"))
-    #     logging.info(f"Generated {len(image_paths)} images: {image_paths}")
-    # except Exception as e:
-    #     logging.error(f"Error generating images: {e}", exc_info=True)
-    #     image_paths = []
-    # 2. Send the email
-    send_email(EMAIL_SUBJECT, extracted_text)
+    
+    send_email(
+        raw_content=extracted_text,
+        model_name=perplexity_response.get("model", "LLM")
+    )
     logging.info("--- Job finished ---")
+
 
 if __name__ == "__main__":
     run_job()

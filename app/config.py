@@ -33,6 +33,9 @@ OUTPUT 3–6 ITEMS MAX. For each, STRICTLY follow:
 🖼️ Stock Images:  
 1. <Unsplash PHOTO page URL that visually represents the topic (finance → charts/markets; cricket → stadium/action; tech → chips/servers; politics → parliament/buildings; disasters → nature scenes). No people, no logos.>  
 2. <Backup Unsplash PHOTO page URL for same theme, different angle>  
+3. <Another Unsplash PHOTO page URL for the same theme, different perspective>  
+4. <Additional Unsplash PHOTO page URL for the same theme, ensuring variety but relevance>  
+5. <Final Unsplash PHOTO page URL for the same theme, as extra fallback>  
 
 #️⃣ Hashtags:
 - Instagram: <7–10 tags; mix trending + niche; lowercase; no spaces>
