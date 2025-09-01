@@ -241,7 +241,7 @@ def _download_photo_bytes(url: str) -> Optional[bytes]:
     return None
 
 def _process_background_image(image_urls: List[str], theme: Dict[str, Any]) -> str:
-    """Process background image with fallback to enhanced gradient"""
+    """Process background image with fallback to static fallback.jpeg"""
     
     # Try each image URL
     for url in (image_urls or []):
@@ -270,17 +270,22 @@ def _process_background_image(image_urls: List[str], theme: Dict[str, Any]) -> s
             output = io.BytesIO()
             img.save(output, format="JPEG", quality=88)
             
-            logging.info("Successfully processed background image")
+            logging.info("✅ Successfully processed background image")
             return _image_to_data_uri(output.getvalue())
             
         except Exception as e:
-            logging.warning(f"Failed to process image: {e}")
+            logging.warning(f"⚠️ Failed to process image: {e}")
             continue
     
-    # Fallback to enhanced gradient
-    logging.info("Using enhanced gradient fallback")
-    gradient_bytes = _create_enhanced_gradient(theme["gradient"])
-    return _image_to_data_uri(gradient_bytes)
+    # Fallback: use static fallback.jpeg
+    fallback_path = os.path.join(os.path.dirname(__file__), "assets", "fallback.jpeg")
+    try:
+        with open(fallback_path, "rb") as f:
+            logging.info("🖼️ Using static fallback.jpeg")
+            return _image_to_data_uri(f.read())
+    except Exception as e:
+        logging.error(f"❌ Could not load fallback.jpeg: {e}")
+        return ""
 
 def _generate_smart_cta(category: str, title: str) -> str:
     """Generate contextually relevant CTA text"""

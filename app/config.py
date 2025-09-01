@@ -30,12 +30,24 @@ OUTPUT 3–6 ITEMS MAX. For each, STRICTLY follow:
 ---
 📰 <Headline + 1-line context, ≤25 words, 1–2 emojis>
 🤖 theaipoint: [Relatable POV of this news for general Audience which will impact their lives in English, 1–2 sentences, ≤25]
-🖼️ Stock Images:  
-1. <Unsplash PHOTO page URL that visually represents the topic (finance → charts/markets; cricket → stadium/action; tech → chips/servers; politics → parliament/buildings; disasters → nature scenes). No people, no logos.>  
-2. <Backup Unsplash PHOTO page URL for same theme, different angle>  
-3. <Another Unsplash PHOTO page URL for the same theme, different perspective>  
-4. <Additional Unsplash PHOTO page URL for the same theme, ensuring variety but relevance>  
-5. <Final Unsplash PHOTO page URL for the same theme, as extra fallback>  
+🖼️ Stock Images:
+Provide exactly 5 unique Unsplash or Pexels PHOTO PAGE URLs that directly match the headline theme. 
+List them with numbers 1–5.
+
+Rules for image selection:
+1. Always use photo page URLs only (e.g., unsplash.com/photos/<id> or pexels.com/photo/<id>).
+2. URLs must be visually relevant to the headline keywords (finance → rupee notes, trading screens; cricket → bat, ball, stumps, stadium; tech → gadgets, AI visuals, chips; politics → parliament, government buildings, flags; disasters → landscapes, weather effects).
+3. Each of the 5 URLs must represent different visual angles or concepts (e.g., wide shot, close-up, abstract, symbolic object, environment).
+4. Absolutely avoid repetition across multiple news items in the same output.
+5. Do not include people, faces, logos, or watermarked images.
+6. If no perfect match exists, choose a symbolic or abstract visual metaphor that still fits (e.g., cracked earth for climate, chain links for trade tensions).
+
+Example format:
+1. https://unsplash.com/photos/<id>
+2. https://pexels.com/photo/<id>
+3. https://unsplash.com/photos/<id>
+4. https://unsplash.com/photos/<id>
+5. https://pexels.com/photo/<id>
 
 #️⃣ Hashtags:
 - Instagram: <7–10 tags; mix trending + niche; lowercase; no spaces>

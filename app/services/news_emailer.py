@@ -79,10 +79,10 @@ def send_email(raw_content, model_name=None):
     attachments = []
     for item in news_items:
         try:
-            title = item["title"] or f"theaipoint post"
-            pov   = item["pov"] or "Why it matters for you."
-            imgs  = item["images"] or []  # generate_image has a dark fallback
-            tags  = item["hashtags"] or ""
+            title = item.get("title") or ""
+            pov   = item.get("pov") or ""
+            imgs  = item.get("images") or []   
+            tags  = item.get("hashtags") or ""
             img_path = make_post_image(title=title,
                     pov=pov,
                     image_urls=imgs,
@@ -138,5 +138,13 @@ def send_email(raw_content, model_name=None):
     with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, context=context) as server:
         server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
         server.sendmail(EMAIL_FROM, EMAIL_TO, message.as_string())
+    
+     # Cleanup: delete generated images
+    for file_path in attachments:
+        try:
+            os.remove(file_path)
+            logging.info(f"🗑️ Deleted temporary image: {file_path}")
+        except Exception as e:
+            logging.warning(f"⚠️ Could not delete {file_path}: {e}")
 
     logging.info(f"📧 Email sent successfully with subject '{subject}' and {len(attachments)} attachments")
