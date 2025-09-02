@@ -1,13 +1,11 @@
 from dotenv import load_dotenv
 import logging
-from app.build_posts import build_images_from_llm
 
 # Load environment variables from .env file
 load_dotenv()
 
 from app.config import PROMPT, EMAIL_SUBJECT
 from app.services.perplexity_service import call_perplexity, extract_text
-# from app.services.email_service import send_email
 from app.parser.news_parser import parse_news_content
 from app.services.news_emailer import send_email
 
