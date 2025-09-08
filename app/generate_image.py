@@ -6,6 +6,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from playwright.async_api import async_playwright
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 import json
+from .custom_bg import generate_custom_bg
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -240,44 +241,17 @@ def _download_photo_bytes(url: str) -> Optional[bytes]:
     
     return None
 
-def _process_background_image(image_urls: List[str], theme: Dict[str, Any]) -> str:
-    """Process background image with fallback to static fallback.jpeg"""
-    
-    # Try each image URL
-    for url in (image_urls or []):
-        if not url:
-            continue
-            
-        logging.info(f"Attempting to download: {url}")
-        image_bytes = _download_photo_bytes(url)
-        
-        if not image_bytes:
-            continue
-            
-        try:
-            # Process the image
-            img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-            img = _cover_resize(img, (1080, 1350))
-            
-            # Apply subtle enhancements
-            enhancer = ImageEnhance.Contrast(img)
-            img = enhancer.enhance(1.05)
-            
-            enhancer = ImageEnhance.Color(img)
-            img = enhancer.enhance(1.1)
-            
-            # Save processed image
-            output = io.BytesIO()
-            img.save(output, format="JPEG", quality=88)
-            
-            logging.info("✅ Successfully processed background image")
-            return _image_to_data_uri(output.getvalue())
-            
-        except Exception as e:
-            logging.warning(f"⚠️ Failed to process image: {e}")
-            continue
-    
-    # Fallback: use static fallback.jpeg
+def _process_background_image(title: str, pov: str, image_urls: List[str], theme: Dict[str, Any]) -> str:
+    """Try Nano Banana → else fallback.jpeg. Returns data URI."""
+
+    # 1) Try custom AI background
+    ai_path = generate_custom_bg(title, pov)
+    if ai_path and os.path.exists(ai_path):
+        with open(ai_path, "rb") as f:
+            logging.info("✅ Using Nano Banana generated image")
+            return _image_to_data_uri(f.read())
+
+    # 2) Fallback: static fallback.jpeg
     fallback_path = os.path.join(os.path.dirname(__file__), "assets", "fallback.jpeg")
     try:
         with open(fallback_path, "rb") as f:
@@ -434,7 +408,7 @@ def make_post_image(
         pov_clean = textwrap.shorten((pov or "").strip(), width=180, placeholder="…")
         
         # Get background
-        background_data_uri = _process_background_image(image_urls or [], theme)
+        background_data_uri = _process_background_image(title,pov,image_urls or [], theme)
         
         # Generate smart CTA
         if not cta_text:
@@ -603,7 +577,6 @@ def make_post_image(
       </div>
 
       <div class="metadata">
-        <span>⏱️ {{ timestamp_ist }}</span>
         <span>📊 {{ category_title }}</span>
       </div>
     </main>

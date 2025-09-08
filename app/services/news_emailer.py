@@ -138,13 +138,20 @@ def send_email(raw_content, model_name=None):
     with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, context=context) as server:
         server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
         server.sendmail(EMAIL_FROM, EMAIL_TO, message.as_string())
-    
+    folder = "app/output"
      # Cleanup: delete generated images
-    for file_path in attachments:
-        try:
-            os.remove(file_path)
-            logging.info(f"🗑️ Deleted temporary image: {file_path}")
-        except Exception as e:
-            logging.warning(f"⚠️ Could not delete {file_path}: {e}")
+    """Remove all files in the given folder (non-recursive)."""
+    try:
+        for filename in os.listdir(folder):
+            file_path = os.path.join(folder, filename)
+            if os.path.isfile(file_path):
+                try:
+                    os.remove(file_path)
+                    logging.info(f"🗑️ Deleted: {file_path}")
+                except Exception as e:
+                    logging.warning(f"⚠️ Could not delete {file_path}: {e}")
+        logging.info("✅ Output folder cleared.")
+    except Exception as e:
+        logging.error(f"❌ Error clearing output folder: {e}")
 
     logging.info(f"📧 Email sent successfully with subject '{subject}' and {len(attachments)} attachments")
