@@ -1,26 +1,36 @@
+import base64
 import os
 import time
 import uuid
 import random
-from google import genai
-from PIL import Image
 from io import BytesIO
+from pathlib import Path
+from PIL import Image
 
-# Configure client once
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+# Google Gemini
+try:
+    from google import genai
+except ImportError:
+    genai = None
 
-def generate_custom_bg(headline: str, pov: str, out_dir: str = "app/output") -> str:
+# Nebius Studio (OpenAI-compatible)
+from openai import OpenAI
+
+# Configure clients once
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+NEBIUS_API_KEY = os.getenv("NEBIUS_API_KEY")
+
+genai_client = genai.Client(api_key=GOOGLE_API_KEY) if GOOGLE_API_KEY and genai else None
+nebius_client = OpenAI(base_url="https://api.studio.nebius.com/v1/", api_key=NEBIUS_API_KEY)
+
+
+def generate_custom_bg(headline: str, pov: str, out_dir: str = "app/output", is_nano_banana: bool = False) -> str:
     """
-    Generate a custom social-media news post image using Nano Banana (Gemini).
-    Adds randomness via style adjectives + seed so each call is unique.
-    
-    Args:
-        headline: News headline text
-        pov: AI point of view / context
-        out_dir: Directory to save the generated image
-    
-    Returns:
-        Path to saved image file
+    Generate a custom social-media news post image using either:
+      - Nano Banana (Gemini) if is_nano_banana=True
+      - Nebius Flux Schnell if is_nano_banana=False
+
+    Returns path to saved PNG image.
     """
     os.makedirs(out_dir, exist_ok=True)
 
@@ -49,23 +59,36 @@ def generate_custom_bg(headline: str, pov: str, out_dir: str = "app/output") -> 
     One high-resolution image (PNG). Do not draw text, just provide a clean visual background.
     """
 
-    # Add randomness via seed
     seed = random.randint(1, 1_000_000)
+    filename = f"news_{int(time.time())}_{uuid.uuid4().hex[:6]}.png"
+    out_path = os.path.join(out_dir, filename)
 
-    # Call the API
-    response = client.models.generate_content(
-        model="gemini-2.5-flash-image-preview",
-        contents=prompt,
-        config={"seed": seed}
-    )
-
-    # Find image in response
-    for part in response.candidates[0].content.parts:
-        if part.inline_data is not None:
-            img = Image.open(BytesIO(part.inline_data.data))
-            filename = f"news_{int(time.time())}_{uuid.uuid4().hex[:6]}.png"
-            out_path = os.path.join(out_dir, filename)
-            img.save(out_path)
-            return out_path
-
-    raise RuntimeError("❌ No image returned from Gemini model.")
+    if is_nano_banana:
+        if not genai_client:
+            raise RuntimeError("Google GenAI not configured. Set GOOGLE_API_KEY.")
+        response = genai_client.models.generate_content(
+            model="gemini-2.5-flash-image-preview",
+            contents=prompt,
+            config={"seed": seed},
+        )
+        for part in response.candidates[0].content.parts:
+            if getattr(part, "inline_data", None):
+                img = Image.open(BytesIO(part.inline_data.data))
+                img.save(out_path, format="PNG")
+                return out_path
+        raise RuntimeError("❌ No image returned from Gemini.")
+    else:
+        if not NEBIUS_API_KEY:
+            raise RuntimeError("Nebius Studio not configured. Set NEBIUS_API_KEY.")
+        response = nebius_client.images.generate(
+            model="black-forest-labs/flux-schnell",
+            prompt=prompt,
+            response_format="b64_json",   # ensure inline base64
+            size="1080x1350"  
+        )
+        # Nebius returns base64 JSON
+        b64_image = response.data[0].b64_json
+        img = Image.open(BytesIO(base64.b64decode(b64_image)))
+        img.save(out_path, format="PNG")
+        return out_path
+    

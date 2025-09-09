@@ -77,21 +77,29 @@ def send_email(raw_content, model_name=None):
 
     # Generate post images for all items
     attachments = []
-    for item in news_items:
+    for idx, item in enumerate(news_items):
         try:
             title = item.get("title") or ""
             pov   = item.get("pov") or ""
             imgs  = item.get("images") or []   
             tags  = item.get("hashtags") or ""
-            img_path = make_post_image(title=title,
-                    pov=pov,
-                    image_urls=imgs,
-                    hashtags=tags,
-                    model_name=model_name,
-                    category="trending"
-                    )
+
+            # ✅ First image always Nano Banana
+            is_nano = (idx == 0)
+
+            img_path = make_post_image(
+                title=title,
+                pov=pov,
+                image_urls=imgs,
+                hashtags=tags,
+                model_name=model_name,
+                category="trending",
+                is_nano_banana=is_nano   # 👈 pass flag
+            )
+
             attachments.append(img_path)
-            logging.info(f"✅ Generated post image: {img_path}")
+            logging.info(f"✅ Generated post image ({'Nano Banana' if is_nano else 'Nebius'}): {img_path}")
+
         except Exception as e:
             traceback.print_exc()
             logging.warning(f"⚠️ Could not generate image for item {item.get('title')}: {e}")

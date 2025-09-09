@@ -10,7 +10,6 @@ logging.basicConfig(
 # --- Perplexity Configuration ---
 PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "pplx-7b-online")
 PPLX_API_KEY = os.getenv("PERPLEXITY_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PROMPT = """You are the content creator for "theaipoint," an AI-powered Indian social media news page.
 
 TODAY’S DATE: {today_date}

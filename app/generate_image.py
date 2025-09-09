@@ -241,14 +241,14 @@ def _download_photo_bytes(url: str) -> Optional[bytes]:
     
     return None
 
-def _process_background_image(title: str, pov: str, image_urls: List[str], theme: Dict[str, Any]) -> str:
+def _process_background_image(title: str, pov: str, image_urls: List[str], theme: Dict[str, Any],is_nano_banana: bool = False) -> str:
     """Try Nano Banana → else fallback.jpeg. Returns data URI."""
 
     # 1) Try custom AI background
-    ai_path = generate_custom_bg(title, pov)
+    ai_path = generate_custom_bg(title, pov,is_nano_banana=is_nano_banana)
     if ai_path and os.path.exists(ai_path):
         with open(ai_path, "rb") as f:
-            logging.info("✅ Using Nano Banana generated image")
+            logging.info(f"✅ Generated post image ({'Nano Banana' if is_nano_banana else 'Nebius'})")
             return _image_to_data_uri(f.read())
 
     # 2) Fallback: static fallback.jpeg
@@ -377,7 +377,8 @@ def make_post_image(
     model_name: str = "claude",
     category: Optional[str] = None,
     cta_text: Optional[str] = None,
-    output_filename: Optional[str] = None
+    output_filename: Optional[str] = None,
+    is_nano_banana: bool = False
 ) -> str:
     """
     Generate a professional social media post image
@@ -408,7 +409,7 @@ def make_post_image(
         pov_clean = textwrap.shorten((pov or "").strip(), width=180, placeholder="…")
         
         # Get background
-        background_data_uri = _process_background_image(title,pov,image_urls or [], theme)
+        background_data_uri = _process_background_image(title,pov,image_urls or [], theme,is_nano_banana=is_nano_banana)
         
         # Generate smart CTA
         if not cta_text:
