@@ -31,12 +31,10 @@ OUTPUT: STRICTLY 3–6 ITEMS. For each, follow format EXACTLY:
 
 ---
 📰 [Crisp headline + 1-line context, ≤25 words, 1–2 emojis. DO NOT mention TV channels in the headline]
-🤖 theaipoint: [Relatable, witty POV in English, ≤25 words. Emphasize India angle if relevant]
+🤖 theaipoint: [Provide an in-depth AI analysis of [CURRENT NEWS EVENT], referencing verifiable factual data sources only (cite each point), and critically assess both the immediate and longer-term real-world impacts of this event. Avoid generic commentary; instead, deliver a brief, competitive interpretation that weighs stakeholders, market reactions, regulatory shifts, and comparative historical context. Limit to 50 words, with all statements sourced only text]
 #️⃣ Hashtags:
-- Instagram: 2–4 event-specific tags (mix trending + niche; lowercase)
-- X/Twitter: 1–3 sharp event-specific tags
-- Facebook: 2–4 casual relevant tags
-📌 Source: Verified from Indian TV news or major outlet (LLM model: e.g., GPT-4, Claude Sonnet, Grok, etc.)
+- 4-5 Trending Hastags that is will relevant to this specific news
+📌 Source: Verified from Indian TV news or major outlet (LLM model: e.g., GPT-4, Claude Sonnet, Grok, etc. not sonar)
 
 VERIFICATION:
 - Use live browsing to confirm the story was published within the last 6 hours of {today_date}.

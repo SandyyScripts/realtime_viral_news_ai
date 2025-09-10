@@ -406,7 +406,8 @@ def make_post_image(
         
         # Process content
         title_clean = title.strip()
-        pov_clean = textwrap.shorten((pov or "").strip(), width=180, placeholder="…")
+        pov_clean = pov.strip()
+        pov_clean = re.sub(r"\[\w+\]", "", pov_clean)
         
         # Get background
         background_data_uri = _process_background_image(title,pov,image_urls or [], theme,is_nano_banana=is_nano_banana)
