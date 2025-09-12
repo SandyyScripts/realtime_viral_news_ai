@@ -585,7 +585,7 @@ def make_post_image(
 
     <footer class="footer">
       <span><strong>@theaipoint</strong> — AI news in 30 sec</span>
-      <span>Source: AI ({{ model_name }})</span>
+      <span>AI Journalist</span>
     </footer>
 
     <div class="cta">
