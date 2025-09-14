@@ -13,26 +13,6 @@ def redact(api_key):
 
 
 DEFAULT_FEEDS_MAP = {
-  "politics": [
-    "https://indianexpress.com/feed/",
-    "https://indianexpress.com/section/politics/feed/",
-    "https://feeds.feedburner.com/ndtvnews-latest",
-    "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
-    "https://www.thehindu.com/news/national/feeder/default.rss",
-    "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
-    "https://www.news18.com/rss/india.xml"
-  ],
-  "cricket": [
-    "https://timesofindia.indiatimes.com/rssfeeds/4719148.cms",
-    "https://indianexpress.com/section/sports/feed/",
-    "https://www.cricbuzz.com/rss/news"
-  ],
-  "bollywood": [
-    "https://timesofindia.indiatimes.com/rssfeedstopstories.cms?cat=entertainment",
-    "https://indianexpress.com/section/entertainment/feed/",
-    "https://feeds.feedburner.com/ndtventertainment-latest",
-    "https://www.hindustantimes.com/feeds/rss/entertainment/rssfeed.xml"
-  ],
   "tech": [
     "https://indianexpress.com/section/technology/feed/",
     "https://feeds.feedburner.com/gadgets360-latest",
@@ -60,34 +40,76 @@ DEFAULT_FEEDS_MAP = {
 def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
     """
     For each RSS news item, call Perplexity and build final array.
+
+    Changed behavior:
+      - Fetch 5 stories from Times of India Top Stories RSS
+      - Fetch 1 story each from 4 other categories (first 4 keys present in DEFAULT_FEEDS_MAP)
+      - Dedupe URLs, limit to MAX_EXTRACT_URLS when extracting article content
+      - Rest of pipeline unchanged (extract_articles_from_links -> call_perplexity_on_news)
     """
-    interests = ["politics", "cricket", "bollywood", "tech", "stock_market", "travel", "fashion"]
-    MAX_PER_INTEREST = 3
-    MAX_EXTRACT_URLS = 8
+    # configurable constants
+    TOPSTORIES_URL = "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
+    NUM_TOPSTORIES = 5
+    NUM_OTHER_CATEGORIES = 4   # one each from 4 other categories
+    ONE_PER_CATEGORY = 1
+    MAX_EXTRACT_URLS = 8  # keep from your original flow
 
-    feeds_map_for_collection = {i: DEFAULT_FEEDS_MAP[i] for i in interests if i in DEFAULT_FEEDS_MAP}
+    # Determine which other categories to use (preserve insertion order of DEFAULT_FEEDS_MAP)
+    available_categories = [k for k in DEFAULT_FEEDS_MAP.keys() if k]
+    # exclude any accidental 'topstories' key if present
+    other_categories = available_categories[:NUM_OTHER_CATEGORIES]
 
-    collected = collect_latest_from_rss(
-        feeds_map=feeds_map_for_collection,
-        max_per_feed=MAX_PER_INTEREST,
+    # 1) Fetch top stories (5) using the collect function
+    top_feed_map = {"topstories": [TOPSTORIES_URL]}
+    top_items = collect_latest_from_rss(
+        feeds_map=top_feed_map,
+        max_per_feed=NUM_TOPSTORIES,
         hours_window=8,
         try_fetch_missing_ts=True,
         debug=False
     )
 
+    # 2) Fetch 1 item each from the chosen other categories (if they exist in DEFAULT_FEEDS_MAP)
+    other_feed_map = {}
+    for cat in other_categories:
+        feeds = DEFAULT_FEEDS_MAP.get(cat)
+        if feeds:
+            other_feed_map[cat] = feeds
+
+    other_items = []
+    if other_feed_map:
+        other_items = collect_latest_from_rss(
+            feeds_map=other_feed_map,
+            max_per_feed=ONE_PER_CATEGORY,
+            hours_window=8,
+            try_fetch_missing_ts=True,
+            debug=False
+        )
+
+    # 3) Combine top + other, dedupe by URL, and build a URL list to extract articles from.
+    combined = []
+    combined.extend(top_items)
+    combined.extend(other_items)
+
     urls = []
     seen_urls = set()
-    for it in collected:
+    for it in combined:
         u = it.get("url")
-        if not u or u in seen_urls:
+        if not u:
             continue
-        seen_urls.add(u)
-        urls.append(u)
+        # simple normalization of URL to avoid tiny variants (strip trailing slash)
+        u_norm = u.rstrip("/")
+        if u_norm in seen_urls:
+            continue
+        seen_urls.add(u_norm)
+        urls.append(u_norm)
         if len(urls) >= MAX_EXTRACT_URLS:
             break
 
+    # 4) Extract article contents from urls (reuses your existing extractor)
     rss_items = extract_articles_from_links(urls, debug=False)
 
+    # 5) Call Perplexity/transform step for each extracted article and keep valid news
     out = []
     for item in rss_items:
         try:
@@ -96,6 +118,7 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
             if is_valid:
                 out.append(transformed)
         except Exception as e:
+            # keep the original behavior of printing errors
             print(f"❌ Error on item: {item.get('title')} -> {e}")
         time.sleep(1)  # polite pause
 
@@ -107,67 +130,67 @@ def call_perplexity_on_news(news_item: Dict[str, Any]) -> Dict[str, Any]:
     Call Perplexity for one news item and return the transformed object.
     """
     prompt = f"""
-        You are the lead content strategist for "theaipoint" - India's fastest-growing AI-powered news platform that creates viral, fact-based content.
+    You are the Chief Editor for "theaipoint" – India's premier AI-powered news platform. 
+    Your job: write engaging, fact-based social media posts that hook readers while staying responsible.
 
-        News Input:
-        {json.dumps(news_item, ensure_ascii=False)}
+    NEWS INPUT:
+    {json.dumps(news_item, ensure_ascii=False)}
 
-        CONTENT CREATION GUIDELINES:
-        
-        📰 HEADLINE FORMULA:
-        - Hook + Key Detail + Impact (≤20 words)
-        - Use power words: "SHOCKING", "EXCLUSIVE", "BREAKING", "MASSIVE"
-        - Include 1-2 strategic emojis (🚨⚡🔥💥📢🎯)
-        - Avoid mentioning TV channels/media outlets
-        - Focus on human impact, not corporate jargon
-        
-        🤖 AI ANALYSIS FRAMEWORK:
-        Create a sharp, data-driven perspective that answers:
-        - WHY should Indians care RIGHT NOW?
-        - WHAT are the hidden implications?
-        - WHO benefits/loses from this?
-        - Connect to broader trends affecting common people
-        - Use specific numbers, percentages, comparisons
-        - Limit: 45-50 words maximum
-        - Cite only verifiable sources in [brackets]
-        
-        #️⃣ HASHTAG STRATEGY:
-        - Mix trending + niche tags for maximum reach
-        - Include 1 branded tag (#TheAIPoint or #AIAnalysis)
-        - 4-5 total hashtags
-        - Research current trending topics
-        
-        📌 SOURCE CREDIBILITY:
-        - Verify through 2+ independent Indian sources
-        - Prefer: PTI, ANI, major newspapers, official statements
-        - Avoid: Unverified social media, opinion blogs
-        - Note LLM model used for transparency
-        
-        VIRAL CONTENT CHECKLIST:
-        ✅ Emotional trigger (anger, surprise, hope, fear)
-        ✅ Relatable to middle-class Indians
-        ✅ Shareable without controversy
-        ✅ Clear call-to-action or discussion starter
-        ✅ Factually accurate and balanced
-        
-        OUTPUT FORMAT - Respond ONLY with JSON:
-        {{
-            "title": "Viral headline with emojis",
-            "pov": "AI analysis with cited sources [1][2]",
-            "hashtags": ["#Tag1", "#Tag2", "#Tag3", "#Tag4", "#TheAIPoint"],
-            "source": "Primary source + LLM model",
-            "is_valid_news": true/false,
-            "category": "breaking/politics/tech/economy/sports/trending",
-            "virality_score": 1-10,
-            "engagement_hook": "Discussion starter question"
-        }}
-        
-        CONTENT QUALITY STANDARDS:
-        - Unbiased reporting with AI-powered insights
-        - No sensationalism without facts
-        - Represent multiple perspectives when relevant
-        - Focus on solutions, not just problems
-        - Indian context and local relevance priority
+    GUIDELINES:
+    - Headline:
+    * Serious/sensitive (deaths, disasters, violence, policy): calm, professional, NO emojis otherwise Use power words: "SHOCKING", "EXCLUSIVE", "BREAKING", "MASSIVE" Breaking/tech/positive/sports: punchy, scroll-stopping, GenZ flavor allowed ✅ (⚡🔥🚀).
+    * Keep it factual, max 15-18 words.
+    - Hashtags: 4-5 max that are trending on twitter/X for this news or topic
+    - Never sensationalize tragedies. Never invent facts.
+
+    📰 HEADLINE FORMULA:
+    - Hook + Key Detail + Impact (≤20 words)
+    - Avoid mentioning TV channels/media outlets
+    - Focus on human impact, not corporate jargon
+    
+    🤖 AI ANALYSIS FRAMEWORK:
+    Create a sharp, data-driven perspective that answers:
+    - WHY should Indians care RIGHT NOW?
+    - WHAT are the hidden implications?
+    - WHO benefits/loses from this?
+    - Connect to broader trends affecting common people
+    - Use specific numbers, percentages, comparisons
+    - Limit: 45-50 words maximum
+    - Cite only verifiable sources in [brackets]
+    
+    #️⃣ HASHTAG STRATEGY:
+    - Mix trending + niche tags for maximum reach
+    - Include 1 branded tag (#TheAIPoint or #AIAnalysis)
+    - 4-5 total hashtags
+    - Research current trending topics
+    
+    📌 SOURCE CREDIBILITY:
+    - Verify through 2+ independent Indian sources
+    - Prefer: PTI, ANI, major newspapers, official statements
+    - Avoid: Unverified social media, opinion blogs
+    - Note LLM model used for transparency
+    
+    VIRAL CONTENT CHECKLIST:
+    ✅ Emotional trigger (anger, surprise, hope, fear)
+    ✅ Relatable to middle-class Indians
+    ✅ Shareable without controversy
+    ✅ Clear call-to-action or discussion starter
+    ✅ Factually accurate and balanced
+
+
+    OUTPUT FORMAT (JSON):
+    {{
+    "title": "Catchy headline (emoji only if appropriate)",
+    "pov": "Balanced, GenZ-friendly analysis with verified context [Source1][Source2]",
+    "hashtags": ["#IndiaNews", "#TopicTag", "#ResponsibleJournalism"],
+    "source": "Verified sources + AI analysis",
+    "is_valid_news": true/false,
+    "category": "breaking/politics/economy/technology/health/sports/positive",
+    "news_sensitivity": "high/medium/low",
+    "editorial_tone": "serious/professional/engaging",
+    "public_interest_score": 1-10,
+    "verification_confidence": "high/medium/low"
+    }}
     """
 
     headers = {

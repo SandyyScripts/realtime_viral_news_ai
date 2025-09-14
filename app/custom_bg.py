@@ -34,30 +34,52 @@ def generate_custom_bg(headline: str, pov: str, out_dir: str = "app/output", is_
     """
     os.makedirs(out_dir, exist_ok=True)
 
-    # Randomized style adjectives for variation
-    style_word = random.choice(["cinematic", "photorealistic", "hyperreal", "dramatic"])
-    energy_word = random.choice(["energetic", "dynamic", "intense", "celebratory"])
+    # Cinematic overlays & effects
+    cinematic_effects = [
+        "volumetric light rays cutting through mist",
+        "glowing particle swirls orbiting the focal object",
+        "dramatic spotlight beams with deep shadows",
+        "glass-shatter explosion in background with glowing shards",
+        "energy motion streaks wrapping around the scene",
+        "ethereal fog with glowing edges and cinematic depth"
+    ]
 
-    prompt = f"""
-    You are a professional social media designer creating a viral news post background image.
+    # Mood-based color palettes
+    color_palettes = [
+        "neon teal with golden sparks",
+        "bright coral with glowing violet light",
+        "electric blue with radiant white highlights",
+        "deep charcoal with molten gold accents",
+        "emerald green with luminous silver tones",
+        "luxurious burgundy with glowing champagne highlights"
+    ]
 
-    Task:
-    Create one bold, editorial, ultra-detailed {style_word} image that represents this news:
-    "{headline}"
+    def build_cinematic_prompt(headline: str) -> str:
+        colors = random.choice(color_palettes)
+        effect = random.choice(cinematic_effects)
+        
+        prompt = f"""
+        Design a cinematic poster-style social media card for: "{headline}"
 
-    Context:
-    {pov}
+        Visual concept:
+        - Symbolically dramatize the news with an epic central scene
+        - {effect}
+        - Palette: {colors}
 
-    Rendering instructions:
-    - Format: 1080x1350 portrait (Instagram feed).
-    - Style: {style_word}, ultra-detailed, editorial, thumb-stopping social-card.
-    - Tone: {energy_word}, high energy — suitable to stop scrolling.
-    - Virality cues: high contrast, dramatic perspective, clean negative space for overlays.
-    - Prohibited: no logos, no watermarks, no political hate symbols, no real faces, no text burned in.
+        Artistic direction:
+        - Bold editorial poster look (1080x1350 portrait)
+        - Scroll-stopping, Instagram-viral, ultra-premium cinematic design
+        - Central composition with glowing highlights, dramatic depth, and layered energy
+        - Negative space zones for headline overlay
+        - STRICTLY AVOID: human faces, gore, disturbing imagery, weapons
+        - Focus on: breathtaking symbolic poster art that makes people stop scrolling
+        - Output: ultra-high definition, no text, no watermarks, no logos
+        """
+        return prompt.strip()
+    
 
-    Output:
-    One high-resolution image (PNG). Do not draw text, just provide a clean visual background.
-    """
+
+    prompt = build_cinematic_prompt(headline)
 
     seed = random.randint(1, 1_000_000)
     filename = f"news_{int(time.time())}_{uuid.uuid4().hex[:6]}.png"

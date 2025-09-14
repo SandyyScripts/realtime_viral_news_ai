@@ -10,47 +10,20 @@ from bs4 import BeautifulSoup
 from typing import List, Dict, Any, Optional
 import json
 DEFAULT_FEEDS_MAP = {
-  "politics": [
-    "https://indianexpress.com/feed/",
-    "https://indianexpress.com/section/politics/feed/",
-    "https://feeds.feedburner.com/ndtvnews-latest",
-    "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
-    "https://www.thehindu.com/news/national/feeder/default.rss",
-    "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
-    "https://www.news18.com/rss/india.xml"
-  ],
-  "cricket": [
-    "https://timesofindia.indiatimes.com/rssfeeds/4719148.cms",
-    "https://indianexpress.com/section/sports/feed/",
-    "https://www.cricbuzz.com/rss/news"
-  ],
-  "bollywood": [
-    "https://timesofindia.indiatimes.com/rssfeedstopstories.cms?cat=entertainment",
-    "https://indianexpress.com/section/entertainment/feed/",
-    "https://feeds.feedburner.com/ndtventertainment-latest",
-    "https://www.hindustantimes.com/feeds/rss/entertainment/rssfeed.xml"
-  ],
   "tech": [
-    "https://indianexpress.com/section/technology/feed/",
+    "https://timesofindia.indiatimes.com/rssfeeds/66949542.cms",
     "https://feeds.feedburner.com/gadgets360-latest",
     "https://timesofindia.indiatimes.com/rssfeeds/5880659.cms",
     "https://www.thehindu.com/sci-tech/feeder/default.rss"
   ],
+  "fitness": [
+    "https://www.thehindu.com/life-and-style/fitness/feeder/default.rss"
+  ],
   "stock_market": [
-    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
-    "https://www.moneycontrol.com/rss/MCtopnews.xml",
-    "https://feeds.feedburner.com/ndtvprofit-latest",
-    "https://indianexpress.com/section/business/feed/"
+    "https://www.thehindu.com/business/markets/feeder/default.rss"
   ],
-  "travel": [
-    "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms",
-    "https://indianexpress.com/section/travel/feed/",
-    "https://www.news18.com/rss/travel.xml"
-  ],
-  "fashion": [
-    "https://timesofindia.indiatimes.com/rssfeeds/2886704.cms",
-    "https://indianexpress.com/section/lifestyle/feed/",
-    "https://www.hindustantimes.com/feeds/rss/lifestyle/rssfeed.xml"
+  "astrology": [
+    "https://timesofindia.indiatimes.com/rssfeeds/65857041.cms"
   ]
 }
 
@@ -556,7 +529,7 @@ if __name__ == "__main__":
     collected = collect_latest_from_rss(
         feeds_map=feeds_map_for_collection,
         max_per_feed=MAX_PER_INTEREST,
-        hours_window=24,
+        hours_window=8,
         try_fetch_missing_ts=True,
         debug=True
     )
