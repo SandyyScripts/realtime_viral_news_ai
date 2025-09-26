@@ -85,7 +85,7 @@ def send_email(news_items, model_name=None):
             tags = " ".join(tags)
 
             # ✅ First image always Nano Banana
-            is_nano = (idx == 0)
+            is_nano = (idx == -1 )
 
             img_path = make_post_image(
                 title=title,

@@ -57,23 +57,30 @@ def generate_custom_bg(headline: str, pov: str, out_dir: str = "app/output", is_
     def build_cinematic_prompt(headline: str) -> str:
         colors = random.choice(color_palettes)
         effect = random.choice(cinematic_effects)
-        
+
         prompt = f"""
-        Design a cinematic poster-style social media card for: "{headline}"
+                    Generate a **4K ultra-high-definition image** for a social media news post.
+                    News context: "{headline}"
 
-        Visual concept:
-        - Symbolically dramatize the news with an epic central scene
-        - {effect}
-        - Palette: {colors}
+                    Guidelines:
+                    - The Image should **symbolically depict the news scenario**, not literally show people or text.
+                    - Keep composition clean with **negative space** zones for overlaying headline and captions.
+                    - Use **modern, editorial visual style**: sharp, high-contrast, visually striking, but not cluttered.
+                    - Atmosphere should match the tone of the news:
+                    
+                    Rendering:
+                    - **4K UHD resolution** (2160x3840 portrait orientation, social-media ready)
+                    - Ultra-sharp details, HDR lighting, crisp textures
+                    - Keywords: *“high-definition background, editorial design, ultra-detailed, 8K clarity, photorealistic textures”*
 
-        Artistic direction:
-        - Bold editorial poster look (1080x1350 portrait)
-        - Scroll-stopping, Instagram-viral, ultra-premium cinematic design
-        - Central composition with glowing highlights, dramatic depth, and layered energy
-        - Negative space zones for headline overlay
-        - STRICTLY AVOID: human faces, gore, disturbing imagery, weapons
-        - Focus on: breathtaking symbolic poster art that makes people stop scrolling
-        - Output: ultra-high definition, no text, no watermarks, no logos
+                    Restrictions:
+                    - NO human faces
+                    - NO gore, blood, disturbing imagery
+                    - NO text, watermarks, or logos
+
+                    Output:
+                    - A clean, symbolic, 4K background image that enhances a social media news card
+                    - Must look premium, modern, and **scroll-stopping**
         """
         return prompt.strip()
     

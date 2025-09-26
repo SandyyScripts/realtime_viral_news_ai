@@ -2,15 +2,18 @@ import requests
 import time
 import json
 import logging
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union,Optional
 from app.config import PERPLEXITY_MODEL, PPLX_API_KEY
 from app.get_rss_feed_data import extract_articles_from_links,collect_latest_from_rss
+import os
+from openai import OpenAI
 
 def redact(api_key):
     if api_key:
         return f"{api_key[:4]}...{api_key[-4:]}"
     return "Not set"
 
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 DEFAULT_FEEDS_MAP = {
   "tech": [
@@ -113,7 +116,7 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
     out = []
     for item in rss_items:
         try:
-            transformed = call_perplexity_on_news(item)
+            transformed = call_chatgpt_on_news(item)
             is_valid = transformed.get("is_valid_news", False)
             if is_valid:
                 out.append(transformed)
@@ -125,126 +128,62 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
     return out
 
 
-def call_perplexity_on_news(news_item: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Call Perplexity for one news item and return the transformed object.
-    """
-    prompt = f"""
-    You are the Chief Editor for "theaipoint" – India's premier AI-powered news platform. 
-    Your job: write engaging, fact-based social media posts that hook readers while staying responsible.
 
+def call_chatgpt_on_news(news_item, model="gpt-4o-mini"):
+    prompt = f"""
     NEWS INPUT:
     {json.dumps(news_item, ensure_ascii=False)}
 
-    GUIDELINES:
-    - Headline:
-    * Serious/sensitive (deaths, disasters, violence, policy): calm, professional, NO emojis otherwise Use power words: "SHOCKING", "EXCLUSIVE", "BREAKING", "MASSIVE" Breaking/tech/positive/sports: punchy, scroll-stopping, GenZ flavor allowed ✅ (⚡🔥🚀).
-    * Keep it factual, max 15-18 words.
-    - Hashtags: 4-5 max that are trending on twitter/X for this news or topic
-    - Never sensationalize tragedies. Never invent facts.
+    Task: Write a viral, fact-checked social post for *The AI Point* (GenZ, Indian audience).  
+    Output: ONLY one JSON object with these lowercase keys:
+    - title
+    - pov
+    - hashtags
+    - source
+    - is_valid_news
+    - category
+    - news_sensitivity
+    - editorial_tone
+    - public_interest_score
+    - verification_confidence
+    - error
 
-    📰 HEADLINE FORMULA:
-    - Hook + Key Detail + Impact (≤20 words)
-    - Avoid mentioning TV channels/media outlets
-    - Focus on human impact, not corporate jargon
-    
-    🤖 AI ANALYSIS FRAMEWORK:
-    Create a sharp, data-driven perspective that answers:
-    - WHY should Indians care RIGHT NOW?
-    - WHAT are the hidden implications?
-    - WHO benefits/loses from this?
-    - Connect to broader trends affecting common people
-    - Use specific numbers, percentages, comparisons
-    - Limit: 45-50 words maximum
-    - Cite only verifiable sources in [brackets]
-    
-    #️⃣ HASHTAG STRATEGY:
-    - Mix trending + niche tags for maximum reach
-    - Include 1 branded tag (#TheAIPoint or #AIAnalysis)
-    - 4-5 total hashtags
-    - Research current trending topics
-    
-    📌 SOURCE CREDIBILITY:
-    - Verify through 2+ independent Indian sources
-    - Prefer: PTI, ANI, major newspapers, official statements
-    - Avoid: Unverified social media, opinion blogs
-    - Note LLM model used for transparency
-    
-    VIRAL CONTENT CHECKLIST:
-    ✅ Emotional trigger (anger, surprise, hope, fear)
-    ✅ Relatable to middle-class Indians
-    ✅ Shareable without controversy
-    ✅ Clear call-to-action or discussion starter
-    ✅ Factually accurate and balanced
+    Rules:
+    - title: ≤18 words, hooky & GenZ-friendly; emojis only for upbeat/tech/sports/positive.
+    - pov: 40–50 words; conversational + analytical; why it matters now; winners/losers; numbers/percents; end with subtle discussion.  
+    - hashtags: 4–5 mix of trending + niche + #TheAIPoint or #AIAnalysis.  
+    - source: ≥2 verified Indian outlets (PTI/ANI/Hindu/IE) or 'insufficient_verification'.  
+    - category: one of [breaking, politics, economy, technology, health, sports, positive].  
+    - news_sensitivity: high/medium/low.  
+    - editorial_tone: engaging + professional (no sensationalizing tragedy).  
+    - public_interest_score: 1–10.  
+    - verification_confidence: high/medium/low.  
+    - is_valid_news: boolean.  
+    - error: "" if fine else reason.
 
+    Style: relatable to middle-class Indians; allow surprise/hope/concern but no fear-mongering; write like a viral caption, not a press release; must be shareable without controversy.
 
-    OUTPUT FORMAT (JSON):
-    {{
-    "title": "Catchy headline (emoji only if appropriate)",
-    "pov": "Balanced, GenZ-friendly analysis with verified context [Source1][Source2]",
-    "hashtags": ["#IndiaNews", "#TopicTag", "#ResponsibleJournalism"],
-    "source": "Verified sources + AI analysis",
-    "is_valid_news": true/false,
-    "category": "breaking/politics/economy/technology/health/sports/positive",
-    "news_sensitivity": "high/medium/low",
-    "editorial_tone": "serious/professional/engaging",
-    "public_interest_score": 1-10,
-    "verification_confidence": "high/medium/low"
-    }}
+    Return only the JSON.
     """
 
-    headers = {
-        "Authorization": f"Bearer {PPLX_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    body = {
-        "model": PERPLEXITY_MODEL,
-        "messages": [
-            {
-                "role": "system", 
-                "content": "You are an expert social media news editor. Create viral, factual content for Indian audiences. Be concise, engaging, and maintain journalistic integrity."
-            },
-            {"role": "user", "content": prompt},
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": "You are TheAIPoint's chief editor. Output strict JSON only."},
+            {"role": "user", "content": prompt}
         ],
-        "temperature": 0.7,  # Add creativity while maintaining accuracy
-        "max_tokens": 1000
-    }
+        max_completion_tokens=600
+    )
 
+    content = resp.choices[0].message.content.strip()
+    if content.startswith("```"):
+        # strip code fences
+        content = "\n".join(line for line in content.splitlines() if not line.strip().startswith("```"))
+    
     try:
-        resp = requests.post("https://api.perplexity.ai/chat/completions", headers=headers, json=body, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-
-        # Extract and clean content
-        content = data["choices"][0]["message"]["content"]
-        content = content.strip()
-        
-        # Remove markdown formatting if present
-        if content.startswith("```json"):
-            content = content.replace("```json", "").replace("```", "").strip()
-        elif content.startswith("```"):
-            content = content.replace("```", "").strip()
-        
-        parsed_data = json.loads(content)
-        
-        # Ensure required fields exist
-        required_fields = ["title", "pov", "hashtags", "source", "is_valid_news", "category"]
-        for field in required_fields:
-            if field not in parsed_data:
-                parsed_data[field] = "" if field != "is_valid_news" else False
-                
-        return parsed_data
-        
-    except requests.exceptions.RequestException as e:
-        print(f"API request failed: {e}")
-        return {"title": news_item.get("title", ""), "is_valid_news": False, "error": str(e)}
-    except json.JSONDecodeError as e:
-        print(f"JSON parsing failed: {e}")
-        return {"title": news_item.get("title", ""), "is_valid_news": False, "error": "Invalid JSON response"}
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        return {"title": news_item.get("title", ""), "is_valid_news": False, "error": str(e)}
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return {"is_valid_news": False, "error": "Invalid JSON", "raw": content}
 
 # Using Union for type hinting for compatibility with Python < 3.10
 def call_perplexity(prompt: str, model: str = PERPLEXITY_MODEL, retries: int = 3, timeout: int = 60) -> Union[dict, None]:
