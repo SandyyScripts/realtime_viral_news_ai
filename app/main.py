@@ -12,11 +12,7 @@ from app.services.news_emailer import send_email
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('app/logs/news_pipeline.log', mode='a')
-    ]
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
 def validate_environment():
