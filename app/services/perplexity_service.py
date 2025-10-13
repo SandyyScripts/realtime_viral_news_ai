@@ -15,164 +15,221 @@ def redact(api_key):
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Replace your old DEFAULT_FEEDS_MAP with this
 DEFAULT_FEEDS_MAP = {
-  "tech": [
-    "https://indianexpress.com/section/technology/feed/",
-    "https://feeds.feedburner.com/gadgets360-latest",
-    "https://timesofindia.indiatimes.com/rssfeeds/5880659.cms",
-    "https://www.thehindu.com/sci-tech/feeder/default.rss"
-  ],
-  "stock_market": [
-    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
-    "https://www.moneycontrol.com/rss/MCtopnews.xml",
-    "https://feeds.feedburner.com/ndtvprofit-latest",
-    "https://indianexpress.com/section/business/feed/"
-  ],
-  "travel": [
-    "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms",
-    "https://indianexpress.com/section/travel/feed/",
-    "https://www.news18.com/rss/travel.xml"
-  ],
-  "fashion": [
-    "https://timesofindia.indiatimes.com/rssfeeds/2886704.cms",
-    "https://indianexpress.com/section/lifestyle/feed/",
-    "https://www.hindustantimes.com/feeds/rss/lifestyle/rssfeed.xml"
-  ]
+    # ========== TOP (pick 6) ==========
+    # Broader coverage + mix of national dailies, digital-first outlets & wire feeds
+    "top_stories": [
+        # national dailies / broad coverage
+        "https://timesofindia.indiatimes.com/rss.cms",                    # Times of India (Top feeds index)
+        "https://www.thehindu.com/news/national/feeder/default.rss",     # The Hindu - National
+        "https://indianexpress.com/feed/",                               # Indian Express - Top
+        "https://www.hindustantimes.com/rss/topnews/rssfeed.xml",        # Hindustan Times - Top
+        # digital-first / analysis
+        "https://www.livemint.com/rss/homepage",                         # Mint - homepage
+        "https://www.ndtv.com/rss/news",                                 # NDTV - Top news
+        # agency / aggregator (helps reduce duplication caused by syndication)
+        "https://www.aninews.in/feed/",                                  # ANI - agency
+    ],
+
+    # ========== WORLD (pick 1) ==========
+    "world": [
+        "https://www.thehindu.com/news/international/feeder/default.rss", # The Hindu - International
+        "https://www.bbc.co.uk/feeds/rss/world.xml",                      # BBC World (India-relevant international lens)
+        "https://www.aljazeera.com/xml/rss/all.xml",                      # Al Jazeera - world
+    ],
+
+    # ========== STOCKS / MARKETS (pick 1) ==========
+    "stocks": [
+        "https://www.livemint.com/rss/markets",                            # Mint - Markets
+        "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms", # Economic Times - Markets
+        "https://www.business-standard.com/rss/markets-economy.rss",       # Business Standard - Markets
+        "https://www.moneycontrol.com/rss/MCtopnews.xml",                  # Moneycontrol top news (markets)
+    ],
+
+    # ========== BOLLYWOOD / ENTERTAINMENT (pick 1) ==========
+    "bollywood": [
+        "https://www.bollywoodhungama.com/rss-feed/",                      # Bollywood Hungama
+        "https://www.filmfare.com/feeds/latest.xml",                       # Filmfare - latest
+        "https://www.pinkvilla.com/rss",                                   # Pinkvilla (entertainment)
+        "https://indianexpress.com/section/entertainment/feed/",           # Indian Express - Entertainment section
+    ],
+
+    # ========== CRICKET / SPORTS (pick 1) ==========
+    "cricket": [
+        "https://www.espncricinfo.com/ci/content/rss/feeds/0.xml",          # ESPNcricinfo - Global news / cricket
+        "https://www.cricbuzz.com/cricket/rss",                            # Cricbuzz - Cricket news
+        "https://www.thehindu.com/sport/cricket/feeder/default.rss",       # The Hindu - Cricket
+        "https://timesofindia.indiatimes.com/rss.cms?sectionId=4719148",   # TOI - Sports (fallback)
+    ],
 }
 
 def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
     """
-    For each RSS news item, call Perplexity and build final array.
+    SIMPLE news curation: Always return exactly 10 posts
 
-    Changed behavior:
-      - Fetch 5 stories from Times of India Top Stories RSS
-      - Fetch 1 story each from 4 other categories (first 4 keys present in DEFAULT_FEEDS_MAP)
-      - Dedupe URLs, limit to MAX_EXTRACT_URLS when extracting article content
-      - Rest of pipeline unchanged (extract_articles_from_links -> call_perplexity_on_news)
+    Strategy:
+      - 6 from top stories (main news)
+      - 1 from world news
+      - 1 from stock market
+      - 1 from Bollywood
+      - 1 from cricket
+      = 10 posts guaranteed
     """
-    # configurable constants
-    TOPSTORIES_URL = "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
-    NUM_TOPSTORIES = 5
-    NUM_OTHER_CATEGORIES = 4   # one each from 4 other categories
-    ONE_PER_CATEGORY = 1
-    MAX_EXTRACT_URLS = 8  # keep from your original flow
+    # SIMPLE STRATEGY - Fixed allocation for predictable output
+    STORIES_PER_CATEGORY = {
+        "top_stories": 6,   # Main top stories (politics, economy, breaking, etc.)
+        "world": 1,         # International news
+        "stocks": 1,        # Stock market/finance
+        "bollywood": 1,     # Entertainment
+        "cricket": 1,       # Sports/cricket
+    }
 
-    # Determine which other categories to use (preserve insertion order of DEFAULT_FEEDS_MAP)
-    available_categories = [k for k in DEFAULT_FEEDS_MAP.keys() if k]
-    # exclude any accidental 'topstories' key if present
-    other_categories = available_categories[:NUM_OTHER_CATEGORIES]
+    MAX_EXTRACT_URLS = 10  # Exactly 10 articles
+    TARGET_POSTS = 10      # Always return 10 posts
+    HOURS_WINDOW = 12      # Wider window to ensure we get content
 
-    # 1) Fetch top stories (5) using the collect function
-    top_feed_map = {"topstories": [TOPSTORIES_URL]}
-    top_items = collect_latest_from_rss(
-        feeds_map=top_feed_map,
-        max_per_feed=NUM_TOPSTORIES,
-        hours_window=8,
-        try_fetch_missing_ts=True,
-        debug=False
-    )
+    print(f"\n🔍 Starting news curation (fetching from {len(STORIES_PER_CATEGORY)} categories)...")
 
-    # 2) Fetch 1 item each from the chosen other categories (if they exist in DEFAULT_FEEDS_MAP)
-    other_feed_map = {}
-    for cat in other_categories:
-        feeds = DEFAULT_FEEDS_MAP.get(cat)
-        if feeds:
-            other_feed_map[cat] = feeds
+    # 1) Fetch stories from each category based on priority
+    all_items = []
+    for category, count in STORIES_PER_CATEGORY.items():
+        feeds = DEFAULT_FEEDS_MAP.get(category)
+        if not feeds:
+            continue
 
-    other_items = []
-    if other_feed_map:
-        other_items = collect_latest_from_rss(
-            feeds_map=other_feed_map,
-            max_per_feed=ONE_PER_CATEGORY,
-            hours_window=8,
+        category_items = collect_latest_from_rss(
+            feeds_map={category: feeds},
+            max_per_feed=count,
+            hours_window=HOURS_WINDOW,
             try_fetch_missing_ts=True,
             debug=False
         )
+        all_items.extend(category_items)
+        print(f"  ✓ {category}: {len(category_items)} stories")
 
-    # 3) Combine top + other, dedupe by URL, and build a URL list to extract articles from.
-    combined = []
-    combined.extend(top_items)
-    combined.extend(other_items)
+    print(f"\n📰 Collected {len(all_items)} total stories")
 
+    # 2) Dedupe by URL and limit to MAX_EXTRACT_URLS
+    # Also build a map for fallback when 403 blocked
     urls = []
+    rss_items_map = {}
     seen_urls = set()
-    for it in combined:
+    for it in all_items:
         u = it.get("url")
         if not u:
             continue
-        # simple normalization of URL to avoid tiny variants (strip trailing slash)
         u_norm = u.rstrip("/")
         if u_norm in seen_urls:
             continue
         seen_urls.add(u_norm)
         urls.append(u_norm)
+        rss_items_map[u_norm] = it  # Store for fallback
         if len(urls) >= MAX_EXTRACT_URLS:
             break
 
-    # 4) Extract article contents from urls (reuses your existing extractor)
+    print(f"🔗 Extracting {len(urls)} unique articles...")
+
+    # 3) Extract article contents with RSS fallback for 403 errors
     rss_items = extract_articles_from_links(urls, debug=False)
 
-    # 5) Call Perplexity/transform step for each extracted article and keep valid news
-    out = []
-    for item in rss_items:
+    print(f"📝 Extracted {len(rss_items)} articles, now scoring with AI...")
+
+    # 4) Transform ALL articles with AI (NO rejection, always get 10 posts)
+    transformed_news = []
+    for idx, item in enumerate(rss_items, 1):
         try:
             transformed = call_chatgpt_on_news(item)
-            is_valid = transformed.get("is_valid_news", False)
-            if is_valid:
-                out.append(transformed)
-        except Exception as e:
-            # keep the original behavior of printing errors
-            print(f"❌ Error on item: {item.get('title')} -> {e}")
-        time.sleep(1)  # polite pause
 
-    return out
+            # Preserve article metadata
+            transformed["article_image_url"] = item.get("top_image_url", "")
+            transformed["article_url"] = item.get("url", "")
+
+            transformed_news.append(transformed)
+            print(f"  ✅ [{idx}/{len(rss_items)}] Transformed: {transformed.get('title', '')[:70]}...")
+
+        except Exception as e:
+            print(f"  ⚠️ [{idx}/{len(rss_items)}] ERROR: {e}")
+            # Still try to include the raw article if AI fails
+            transformed_news.append({
+                "title": item.get("title", "")[:100],
+                "pov": item.get("description_5line", "")[:200],
+                "hashtags": "#TheAIPoint #News #India",
+                "image_generation_prompt": "news background abstract, professional journalism, modern editorial",
+                "source": item.get("source", ""),
+                "category": "general",
+                "article_image_url": item.get("top_image_url", ""),
+                "article_url": item.get("url", ""),
+            })
+
+        time.sleep(0.8)  # Polite pause
+
+    print(f"\n🎯 FINAL SELECTION: {len(transformed_news)} posts ready")
+    return transformed_news
 
 
 
 def call_chatgpt_on_news(news_item, model="gpt-4o-mini"):
-    prompt = f"""
-    NEWS INPUT:
-    {json.dumps(news_item, ensure_ascii=False)}
+    # Compress news item to essential fields only (save tokens)
+    compact_news = {
+        "title": news_item.get("title", "")[:200],
+        "description": news_item.get("description_5line", news_item.get("full_text", ""))[:600],
+        "source": news_item.get("source", ""),
+        "published": news_item.get("published_at", "")
+    }
 
-    Task: Write a viral, fact-checked social post for *The AI Point* (GenZ, Indian audience).  
-    Output: ONLY one JSON object with these lowercase keys:
-    - title
-    - pov
-    - hashtags
-    - source
-    - is_valid_news
-    - category
-    - news_sensitivity
-    - editorial_tone
-    - public_interest_score
-    - verification_confidence
-    - error
+    prompt = f"""NEWS: {json.dumps(compact_news, ensure_ascii=False)}
 
-    Rules:
-    - title: ≤18 words, hooky & GenZ-friendly; emojis only for upbeat/tech/sports/positive.
-    - pov: 40–50 words; conversational + analytical; why it matters now; winners/losers; numbers/percents; end with subtle discussion.  
-    - hashtags: 4–5 mix of trending + niche + #TheAIPoint or #AIAnalysis.  
-    - source: ≥2 verified Indian outlets (PTI/ANI/Hindu/IE) or 'insufficient_verification'.  
-    - category: one of [breaking, politics, economy, technology, health, sports, positive].  
-    - news_sensitivity: high/medium/low.  
-    - editorial_tone: engaging + professional (no sensationalizing tragedy).  
-    - public_interest_score: 1–10.  
-    - verification_confidence: high/medium/low.  
-    - is_valid_news: boolean.  
-    - error: "" if fine else reason.
+Create social media post for Indian audience. Output JSON only.
 
-    Style: relatable to middle-class Indians; allow surprise/hope/concern but no fear-mongering; write like a viral caption, not a press release; must be shareable without controversy.
+=== 1. HEADLINE (≤18 words) ===
+REWRITE with power hooks to grab attention like it is written by a Senior Journalist who knows the audience and knows how to convey a news story in a way that will grab attention.
+Use: ₹/crore/lakh, Indian cities/people
+✅ "Shock: EMI jumps ₹2,400/month—RBI move hits 4cr borrowers"
+❌ "Government Announces Policy" (boring)
 
-    Return only the JSON.
-    """
+=== 2. AI POINT (40-50 words) ===
+UNIQUE insight with data/predictions/patterns
+End with question hook
+✅ "Pattern: ₹1 drop = ₹800cr saved BUT crude costs ₹1,200cr more. Net: -₹400cr daily. Will RBI defend rupee or reserves?"
+❌ "Many impacted. Time will tell." (lazy)
+
+=== 3. HASHTAGS (4 total) ===
+ALWAYS start with: #TheAIPoint
+Then add 3 RELEVANT hashtags from news content
+Rules:
+- Use specific keywords from headline (not generic #News #India #Breaking)
+- Include topic-specific tags (e.g., #RBI #Rupee #Economy OR #Virat #Cricket #BCCI)
+- Mix popular + niche tags
+
+EXAMPLES:
+✅ RBI news: "#TheAIPoint #RBI #InterestRates #HomeLoan"
+✅ Cricket: "#TheAIPoint #Virat #BCCI #IndianCricket"
+✅ Bollywood: "#TheAIPoint #Bollywood #BoxOffice #ShahRukh"
+✅ Stocks: "#TheAIPoint #Sensex #StockMarket #Investing"
+❌ "#TheAIPoint #News #India #Trending" (too generic)
+
+=== 4. IMAGE PROMPT (60-90 words) ===
+Flux Schnell prompt for THIS news:
+[Subject]: Specific visual | [Mood]: tone | [Colors]: palette | [Lighting]: dramatic | [Quality]: 4K photorealistic | NO faces/text/logos
+
+EXAMPLES:
+✅ "Dark money briefcase, broken handcuffs, courthouse pillars, side lighting, red/black, crisis mood, 4K photorealistic, NO faces/text"
+✅ "Cricket stadium floodlights, empty armband on blue jersey, melancholic, blue/saffron, spotlight, 4K, NO faces/text"
+✅ "₹ symbol falling through red charts, financial skyline blurred, red/black, dramatic lighting, 4K, NO faces/text"
+
+JSON: {{"title":"...","pov":"...","hashtags":"#TheAIPoint #Specific #Relevant #Tags","image_generation_prompt":"...","source":"...","category":"politics|cricket|bollywood|economy|tech|world|disaster|positive","news_sensitivity":"low|medium|high"}}
+
+Return ONLY valid JSON. NO rejection - transform every news."""
 
     resp = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": "You are TheAIPoint's chief editor. Output strict JSON only."},
+            {"role": "system", "content": "You are TheAIPoint's AI editor. Transform ALL news into engaging social posts with unique insights and RELEVANT hashtags. Always output valid JSON. Never reject."},
             {"role": "user", "content": prompt}
         ],
-        max_completion_tokens=600
+        max_completion_tokens=450,
+        temperature=0.7
     )
 
     content = resp.choices[0].message.content.strip()

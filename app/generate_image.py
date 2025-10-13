@@ -241,14 +241,21 @@ def _download_photo_bytes(url: str) -> Optional[bytes]:
     
     return None
 
-def _process_background_image(title: str, pov: str, image_urls: List[str], theme: Dict[str, Any],is_nano_banana: bool = False) -> str:
-    """Try Nano Banana → else fallback.jpeg. Returns data URI."""
+def _process_background_image(title: str, pov: str, image_urls: List[str], theme: Dict[str, Any], is_nano_banana: bool = False, category: str = "general", article_image_url: Optional[str] = None, flux_prompt: Optional[str] = None) -> str:
+    """Generate background image using AI-generated Flux prompt. Returns data URI."""
 
-    # 1) Try custom AI background
-    ai_path = generate_custom_bg(title, pov,is_nano_banana=is_nano_banana)
+    # 1) Generate using ChatGPT-optimized Flux Schnell prompt
+    ai_path = generate_custom_bg(
+        title,
+        pov,
+        is_nano_banana=is_nano_banana,
+        category=category,
+        article_image_url=article_image_url,
+        flux_prompt=flux_prompt
+    )
     if ai_path and os.path.exists(ai_path):
         with open(ai_path, "rb") as f:
-            logging.info(f"✅ Generated post image ({'Nano Banana' if is_nano_banana else 'Nebius'})")
+            logging.info(f"✅ Generated post image ({'Nano Banana' if is_nano_banana else 'Flux Schnell'}) with AI-optimized prompt")
             return _image_to_data_uri(f.read())
 
     # 2) Fallback: static fallback.jpeg
@@ -338,30 +345,37 @@ def _determine_headline_size(title: str) -> str:
         return "h-sm"
 
 async def _render_html_to_image(html_content: str, output_path: pathlib.Path) -> None:
-    """Render HTML to image using Playwright"""
+    """Render HTML to 4K image using Playwright with optimized settings"""
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(
             headless=True,
-            args=['--no-sandbox', '--disable-dev-shm-usage']
+            args=[
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--font-render-hinting=none',  # Better font rendering
+                '--force-color-profile=srgb',  # Better color accuracy
+            ]
         )
-        
+
         try:
+            # 4K rendering: deviceScaleFactor=3 for ultra-sharp text
             page = await browser.new_page(
-                viewport={"width": 1080, "height": 1350, "deviceScaleFactor": 2}
+                viewport={"width": 1080, "height": 1350, "deviceScaleFactor": 3}
             )
-            
+
             # Set content and wait for everything to load
             await page.set_content(html_content, wait_until="networkidle")
-            
-            # Wait a bit more for any animations/effects
-            await page.wait_for_timeout(500)
-            
-            # Take screenshot
+
+            # Wait for fonts and images to fully load
+            await page.wait_for_timeout(800)
+
+            # Take 4K screenshot with highest quality
             await page.screenshot(
                 path=str(output_path),
                 type="jpeg",
-                quality=90,
-                full_page=False
+                quality=95,  # Higher quality for 4K
+                full_page=False,
+                omit_background=False
             )
             
             logging.info(f"Successfully rendered image: {output_path}")
@@ -378,7 +392,9 @@ def make_post_image(
     category: Optional[str] = None,
     cta_text: Optional[str] = None,
     output_filename: Optional[str] = None,
-    is_nano_banana: bool = False
+    is_nano_banana: bool = False,
+    article_image_url: Optional[str] = None,
+    flux_prompt: Optional[str] = None
 ) -> str:
     """
     Generate a professional social media post image
@@ -408,9 +424,15 @@ def make_post_image(
         title_clean = title.strip()
         pov_clean = pov.strip()
         pov_clean = re.sub(r"\[\w+\]", "", pov_clean)
-        
-        # Get background
-        background_data_uri = _process_background_image(title,pov,image_urls or [], theme,is_nano_banana=is_nano_banana)
+
+        # Get background using AI-generated Flux Schnell prompt
+        background_data_uri = _process_background_image(
+            title, pov, image_urls or [], theme,
+            is_nano_banana=is_nano_banana,
+            category=detected_category,
+            article_image_url=article_image_url,
+            flux_prompt=flux_prompt
+        )
         
         # Generate smart CTA
         if not cta_text:
@@ -438,7 +460,8 @@ def make_post_image(
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>theaipoint - Social Post</title>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;800&family=Inter:wght@400;500;600&family=DM+Sans:wght@500;600&display=swap" rel="stylesheet">
+  <!-- VIRAL TYPOGRAPHY: Bold, Thick, High-Contrast for Social Media -->
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800;900&family=Inter:wght@500;600;700;800;900&family=Bebas+Neue&display=swap" rel="stylesheet">
   <style>
     :root {
       --w: 1080px; --h: 1350px; --pad: 48px;
@@ -451,9 +474,12 @@ def make_post_image(
 
     html, body {
       width: var(--w); height: var(--h);
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       color: var(--fg); background: #000; overflow: hidden;
-      -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+      image-rendering: -webkit-optimize-contrast;
     }
 
     .bg-container { position: absolute; inset: 0; overflow: hidden; }
@@ -476,82 +502,183 @@ def make_post_image(
       display: flex; flex-direction: column; z-index: 10;
     }
 
-    /* Branding */
+    /* Branding - Enhanced */
     .header {
       display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;
     }
     .brand {
-      display: flex; flex-direction: column; gap: 2px;
+      display: flex; flex-direction: column; gap: 4px;
     }
     .brand-text {
-      font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 32px;
-      color: #fff; letter-spacing: -0.5px; text-shadow: 0 3px 6px rgba(0,0,0,0.6);
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 900;
+      font-size: 42px;
+      color: #ffffff;
+      letter-spacing: -1px;
+      text-shadow: 0 4px 12px rgba(0,0,0,0.95), 0 2px 4px rgba(0,0,0,0.8);
     }
     .tagline {
-      font-family: 'Inter', sans-serif; font-size: 16px; color: var(--fgSecondary);
-    }
-    .badge {
-      background: linear-gradient(135deg, var(--brand), var(--accent));
-      color: #fff; padding: 8px 14px; border-radius: 12px;
-      font-weight: 600; font-family: 'DM Sans', sans-serif; font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      color: var(--brand);
+      font-weight: 800;
       text-transform: uppercase;
+      letter-spacing: 3px;
     }
 
-    /* Headline */
+    /* Breaking Badge - NEW */
+    .breaking-badge {
+      background: linear-gradient(135deg, #ff0000, #ff4444);
+      color: #fff; padding: 10px 18px; border-radius: 8px;
+      font-weight: 800; font-family: 'DM Sans', sans-serif; font-size: 14px;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      box-shadow: 0 0 20px rgba(255,0,0,0.5), 0 4px 12px rgba(0,0,0,0.6);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    /* Category Pill - Enhanced */
+    .category-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      padding: 10px 18px; border-radius: 20px;
+      font-weight: 700; font-size: 14px; font-family: 'DM Sans', sans-serif;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .category-icon { font-size: 18px; }
+
+    /* Headline - VIRAL OPTIMIZED: Bold, Thick, Punchy */
     .headline {
-      font-family: 'Outfit', sans-serif; font-weight: 800; line-height: 1.1;
-      color: #fff; text-shadow: 0 4px 12px rgba(0,0,0,0.6);
-      margin-bottom: 20px;
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 900;
+      line-height: 1.05;
+      color: #ffffff;
+      letter-spacing: -1.5px;
+      margin-bottom: 32px;
+      text-shadow: 0 4px 8px rgba(0,0,0,1),
+                   0 8px 24px rgba(0,0,0,0.8),
+                   0 2px 4px rgba(0,0,0,0.9);
+      word-wrap: break-word;
+      text-transform: none;
     }
-    .h-xl { font-size: 72px; }
-    .h-lg { font-size: 64px; }
-    .h-md { font-size: 54px; }
-    .h-sm { font-size: 44px; }
+    .h-xl { font-size: 82px; line-height: 1.0; }
+    .h-lg { font-size: 72px; line-height: 1.05; }
+    .h-md { font-size: 62px; line-height: 1.08; }
+    .h-sm { font-size: 52px; line-height: 1.1; }
 
-    /* AI POV Glassmorphism Card */
+    /* AI POV Card - VIRAL OPTIMIZED: Bolder, More Prominent */
     .ai-point {
-      background: rgba(0,0,0,0.45);
-      backdrop-filter: blur(14px);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 18px;
-      padding: 22px 26px;
-      margin-bottom: 24px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      background: linear-gradient(145deg,
+        rgba(0,0,0,0.85) 0%,
+        rgba(0,0,0,0.75) 100%);
+      backdrop-filter: blur(28px);
+      border: 3px solid rgba(255,255,255,0.25);
+      border-left: 8px solid var(--brand);
+      border-radius: 24px;
+      padding: 32px 36px;
+      margin-bottom: 32px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.9),
+                  inset 0 2px 0 rgba(255,255,255,0.2),
+                  0 0 60px rgba(0,0,0,0.6);
+      position: relative;
+    }
+    .ai-point::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--brand), transparent);
+      opacity: 0.7;
     }
     .ai-label {
-      font-family: 'DM Sans', sans-serif; font-size: 15px;
-      font-weight: 600; color: var(--brand); margin-bottom: 10px;
-      display: flex; align-items: center; gap: 8px;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 15px;
+      font-weight: 900;
+      color: var(--brand);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    }
+    .ai-label::before {
+      content: '●';
+      font-size: 12px;
+      color: var(--brand);
+      animation: glow 2s ease-in-out infinite;
+    }
+    @keyframes glow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.15); }
     }
     .ai-content {
-      font-family: 'Inter', sans-serif; font-size: 24px; font-weight: 500;
-      line-height: 1.35; color: #fff;
+      font-family: 'Inter', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.4;
+      color: #ffffff;
+      letter-spacing: -0.3px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
     }
 
-    /* Metadata */
+    /* Metadata - Enhanced */
     .metadata {
       display: flex; align-items: center; gap: 20px;
-      color: var(--fgMuted); font-family: 'Inter', sans-serif;
-      font-size: 16px; margin-top: auto;
+      margin-top: auto;
     }
 
-    /* Footer */
+    /* Footer - Enhanced with Verification */
     .footer {
       display: flex; justify-content: space-between; align-items: center; margin-top: 28px;
       font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--fgSecondary);
     }
+    .verified-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(29, 155, 240, 0.15);
+      padding: 6px 12px; border-radius: 20px;
+      border: 1px solid rgba(29, 155, 240, 0.3);
+      font-size: 13px; font-weight: 600;
+    }
+    .verified-icon {
+      color: #1d9bf0; font-size: 14px; font-weight: 900;
+    }
 
-    /* CTA Button */
+    /* CTA Button - Enhanced with Animation */
     .cta {
       position: absolute; bottom: var(--pad); left: 0; right: 0;
       display: flex; justify-content: center;
     }
     .cta-button {
       background: linear-gradient(135deg, var(--brand), var(--accent));
-      color: #fff; padding: 16px 28px;
-      font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 18px;
-      border-radius: 50px; box-shadow: 0 6px 16px rgba(0,0,0,0.4);
-      display: inline-flex; align-items: center; gap: 8px;
+      color: #fff; padding: 18px 36px;
+      font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 19px;
+      border-radius: 50px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 40px rgba(0,0,0,0.2);
+      display: inline-flex; align-items: center; gap: 10px;
+      position: relative; overflow: hidden;
+    }
+    .cta-button::before {
+      content: '';
+      position: absolute; top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      animation: shimmer 3s infinite;
+    }
+    @keyframes shimmer {
+      to { left: 100%; }
+    }
+    .cta-arrow {
+      font-size: 20px;
+      animation: bounce 2s ease-in-out infinite;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateX(0); }
+      50% { transform: translateX(5px); }
     }
   </style>
 </head>
@@ -567,29 +694,40 @@ def make_post_image(
         <div class="brand-text">theaipoint</div>
         <div class="tagline">news + ai perspective</div>
       </div>
-      <div class="badge">AI Point</div>
+      {% if category == 'breaking' %}
+      <div class="breaking-badge">🚨 BREAKING</div>
+      {% endif %}
     </header>
 
     <main>
       <h1 class="headline {{ headline_size }}">{{ title }}</h1>
 
       <div class="ai-point">
-        <div class="ai-label">✨ AI Point</div>
+        <div class="ai-label">AI POINT</div>
         <div class="ai-content">{{ pov }}</div>
       </div>
 
       <div class="metadata">
-        <span>📊 {{ category_title }}</span>
+        <div class="category-pill">
+          <span class="category-icon">{{ icon }}</span>
+          <span>{{ category_title }}</span>
+        </div>
       </div>
     </main>
 
     <footer class="footer">
       <span><strong>@theaipoint</strong> — AI news in 30 sec</span>
-      <span>AI Journalist</span>
+      <div class="verified-badge">
+        <span class="verified-icon">✓</span>
+        <span>AI Verified</span>
+      </div>
     </footer>
 
     <div class="cta">
-      <div class="cta-button">{{ cta_text }}</div>
+      <div class="cta-button">
+        <span>{{ cta_text }}</span>
+        <span class="cta-arrow">→</span>
+      </div>
     </div>
   </div>
 </body>

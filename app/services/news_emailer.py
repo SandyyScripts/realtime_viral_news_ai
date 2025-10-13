@@ -79,13 +79,21 @@ def send_email(news_items, model_name=None):
         try:
             title = item.get("title") or ""
             pov   = item.get("pov") or ""
-            imgs  = item.get("images") or []   
-            tags  = item.get("hashtags") or []
-            category = item.get("category") or "trending"
-            tags = " ".join(tags)
+            imgs  = item.get("images") or []
+            category = item.get("category") or "general"
+            article_image_url = item.get("article_image_url") or ""
+            flux_prompt = item.get("image_generation_prompt") or ""
 
-            # ✅ First image always Nano Banana
-            is_nano = (idx == -1 )
+            # Fix: Handle hashtags as string or list
+            tags = item.get("hashtags") or ""
+            if isinstance(tags, list):
+                tags = " ".join(tags)
+            elif not isinstance(tags, str):
+                tags = ""
+
+            # Always use Nebius Flux Schnell (user preference)
+            # Gemini code kept for future use if needed
+            is_nano = False
 
             img_path = make_post_image(
                 title=title,
@@ -94,15 +102,18 @@ def send_email(news_items, model_name=None):
                 hashtags=tags,
                 model_name=model_name,
                 category=category,
-                is_nano_banana=is_nano   # 👈 pass flag
+                is_nano_banana=is_nano,
+                article_image_url=article_image_url,
+                flux_prompt=flux_prompt
             )
 
             attachments.append(img_path)
-            logging.info(f"✅ Generated post image ({'Nano Banana' if is_nano else 'Nebius'}): {img_path}")
+            logging.info(f"✅ [{idx+1}/{len(news_items)}] Generated image (Flux Schnell): {os.path.basename(img_path)}")
 
         except Exception as e:
             traceback.print_exc()
             logging.warning(f"⚠️ Could not generate image for item {item.get('title')}: {e}")
+            # Continue to next item even if one fails
 
     
 
@@ -141,28 +152,52 @@ def send_email(news_items, model_name=None):
         except Exception as e:
             logging.warning(f"⚠️ Could not attach {file_path}: {e}")
 
-    # Send email
+    # Send email with retry logic
     context = ssl.create_default_context()
-    with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, context=context) as server:
-        server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
-        server.sendmail(EMAIL_FROM, EMAIL_TO, message.as_string())
+    max_retries = 3
+    retry_delay = 5  # seconds
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            logging.info(f"📤 Sending email (attempt {attempt}/{max_retries})...")
+            with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, context=context) as server:
+                server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
+                server.sendmail(EMAIL_FROM, EMAIL_TO, message.as_string())
+            logging.info(f"📧 Email sent successfully with subject '{subject}' and {len(attachments)} attachments")
+            break  # Success - exit retry loop
+
+        except smtplib.SMTPAuthenticationError as e:
+            logging.error(f"❌ Email authentication failed: {e}")
+            logging.error("   Check EMAIL_USERNAME and EMAIL_PASSWORD in .env")
+            raise  # Don't retry auth errors
+
+        except smtplib.SMTPException as e:
+            if attempt < max_retries:
+                logging.warning(f"⚠️ Email send failed (attempt {attempt}): {e}")
+                logging.info(f"   Retrying in {retry_delay} seconds...")
+                import time
+                time.sleep(retry_delay)
+            else:
+                logging.error(f"❌ Email send failed after {max_retries} attempts: {e}")
+                raise
+
+        except Exception as e:
+            logging.error(f"❌ Unexpected email error: {e}")
+            raise
+
+    # Cleanup: delete generated images
     folder = "app/output"
-     # Cleanup: delete generated images
-    """Remove all files in the given folder (non-recursive)."""
     try:
+        logging.info("🗑️ Cleaning up temporary files...")
         for filename in os.listdir(folder):
             file_path = os.path.join(folder, filename)
             try:
                 if os.path.isfile(file_path) or os.path.islink(file_path):
                     os.remove(file_path)
-                    logging.info(f"🗑️ Deleted file: {file_path}")
                 elif os.path.isdir(file_path):
                     shutil.rmtree(file_path)
-                    logging.info(f"🗑️ Deleted folder: {file_path}")
             except Exception as e:
                 logging.warning(f"⚠️ Could not delete {file_path}: {e}")
-        logging.info("✅ Output folder cleared.")
+        logging.info("✅ Cleanup complete")
     except Exception as e:
         logging.error(f"❌ Error clearing output folder: {e}")
-
-    logging.info(f"📧 Email sent successfully with subject '{subject}' and {len(attachments)} attachments")
