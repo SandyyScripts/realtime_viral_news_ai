@@ -194,13 +194,14 @@ End with question hook
 ✅ "Pattern: ₹1 drop = ₹800cr saved BUT crude costs ₹1,200cr more. Net: -₹400cr daily. Will RBI defend rupee or reserves?"
 ❌ "Many impacted. Time will tell." (lazy)
 
-=== 3. HASHTAGS (4 total) ===
+=== 3. HASHTAGS (5 total) ===
 ALWAYS start with: #TheAIPoint
-Then add 3 RELEVANT hashtags from news content
+Then add 4 RELEVANT hashtags from news content
 Rules:
 - Use specific keywords from headline (not generic #News #India #Breaking)
 - Include topic-specific tags (e.g., #RBI #Rupee #Economy OR #Virat #Cricket #BCCI)
 - Mix popular + niche tags
+- Avoid Generic Hastags and think of hastags that can go viral and improve my reach
 
 EXAMPLES:
 ✅ RBI news: "#TheAIPoint #RBI #InterestRates #HomeLoan"
