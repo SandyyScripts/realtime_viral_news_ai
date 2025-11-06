@@ -66,32 +66,38 @@ DEFAULT_FEEDS_MAP = {
 
 def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
     """
-    SIMPLE news curation: Always return exactly 10 posts
+    HYBRID news curation: 2 trending RSS posts + 3 viral search posts = 5 total
 
     Strategy:
-      - 6 from top stories (main news)
-      - 1 from world news
-      - 1 from stock market
-      - 1 from Bollywood
-      - 1 from cricket
-      = 10 posts guaranteed
+      - 2 from trending RSS feeds (verified news sources)
+      - 3 from viral search (Perplexity API - trending/controversial content)
+      = 5 posts total
     """
-    # SIMPLE STRATEGY - Fixed allocation for predictable output
+    from app.services.viral_search_service import search_viral_news
+
+    TARGET_RSS_POSTS = 2     # Top 2 trending from RSS
+    TARGET_VIRAL_POSTS = 3   # Top 3 viral from search
+    TARGET_TOTAL = 5         # Total posts to return
+    HOURS_WINDOW = 12        # Wider window to ensure we get content
+
+    print(f"\n🔍 Starting HYBRID news curation (2 RSS + 3 Viral Search = 5 total)...")
+
+    # ========== PART 1: Get 2 Trending RSS Posts ==========
+    print(f"\n📰 PART 1: Fetching top 2 trending RSS posts...")
+
     STORIES_PER_CATEGORY = {
-        "top_stories": 6,   # Main top stories (politics, economy, breaking, etc.)
-        "world": 1,         # International news
-        "stocks": 1,        # Stock market/finance
-        "bollywood": 1,     # Entertainment
-        "cricket": 1,       # Sports/cricket
+        "top_stories": 3,   # Fetch more to choose best
+        "world": 1,
+        "stocks": 1,
+        "bollywood": 1,
+        "cricket": 1,
     }
 
-    MAX_EXTRACT_URLS = 10  # Exactly 10 articles
-    TARGET_POSTS = 10      # Always return 10 posts
-    HOURS_WINDOW = 12      # Wider window to ensure we get content
+    MAX_EXTRACT_URLS = 7  # Fetch 7, select top 2 trending
 
-    print(f"\n🔍 Starting news curation (fetching from {len(STORIES_PER_CATEGORY)} categories)...")
+    print(f"   Collecting from {len(STORIES_PER_CATEGORY)} RSS categories...")
 
-    # 1) Fetch stories from each category based on priority
+    # 1) Fetch stories from each category
     all_items = []
     for category, count in STORIES_PER_CATEGORY.items():
         feeds = DEFAULT_FEEDS_MAP.get(category)
@@ -106,12 +112,11 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
             debug=False
         )
         all_items.extend(category_items)
-        print(f"  ✓ {category}: {len(category_items)} stories")
+        print(f"     ✓ {category}: {len(category_items)} stories")
 
-    print(f"\n📰 Collected {len(all_items)} total stories")
+    print(f"   📰 Collected {len(all_items)} total RSS stories")
 
     # 2) Dedupe by URL and limit to MAX_EXTRACT_URLS
-    # Also build a map for fallback when 403 blocked
     urls = []
     rss_items_map = {}
     seen_urls = set()
@@ -124,19 +129,19 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
             continue
         seen_urls.add(u_norm)
         urls.append(u_norm)
-        rss_items_map[u_norm] = it  # Store for fallback
+        rss_items_map[u_norm] = it
         if len(urls) >= MAX_EXTRACT_URLS:
             break
 
-    print(f"🔗 Extracting {len(urls)} unique articles...")
+    print(f"   🔗 Extracting {len(urls)} unique articles...")
 
-    # 3) Extract article contents with RSS fallback for 403 errors
+    # 3) Extract article contents
     rss_items = extract_articles_from_links(urls, debug=False)
 
-    print(f"📝 Extracted {len(rss_items)} articles, now scoring with AI...")
+    print(f"   📝 Extracted {len(rss_items)} articles, now transforming with AI...")
 
-    # 4) Transform ALL articles with AI (NO rejection, always get 10 posts)
-    transformed_news = []
+    # 4) Transform articles with AI and score for trending
+    transformed_rss = []
     for idx, item in enumerate(rss_items, 1):
         try:
             transformed = call_chatgpt_on_news(item)
@@ -145,13 +150,16 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
             transformed["article_image_url"] = item.get("top_image_url", "")
             transformed["article_url"] = item.get("url", "")
 
-            transformed_news.append(transformed)
-            print(f"  ✅ [{idx}/{len(rss_items)}] Transformed: {transformed.get('title', '')[:70]}...")
+            # Add recency score (newer = higher score)
+            transformed["_recency_rank"] = idx  # Lower is newer
+
+            transformed_rss.append(transformed)
+            print(f"     ✅ [{idx}/{len(rss_items)}] {transformed.get('title', '')[:60]}...")
 
         except Exception as e:
-            print(f"  ⚠️ [{idx}/{len(rss_items)}] ERROR: {e}")
-            # Still try to include the raw article if AI fails
-            transformed_news.append({
+            print(f"     ⚠️ [{idx}/{len(rss_items)}] ERROR: {e}")
+            # Fallback item
+            transformed_rss.append({
                 "title": item.get("title", "")[:100],
                 "pov": item.get("description_5line", "")[:200],
                 "hashtags": "#TheAIPoint #News #India",
@@ -160,12 +168,89 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
                 "category": "general",
                 "article_image_url": item.get("top_image_url", ""),
                 "article_url": item.get("url", ""),
+                "_recency_rank": idx
             })
 
         time.sleep(0.8)  # Polite pause
 
-    print(f"\n🎯 FINAL SELECTION: {len(transformed_news)} posts ready")
-    return transformed_news
+    # 5) Select top 2 most recent/trending RSS posts
+    transformed_rss.sort(key=lambda x: x.get("_recency_rank", 999))
+    top_rss_posts = transformed_rss[:TARGET_RSS_POSTS]
+
+    # Remove internal ranking field
+    for post in top_rss_posts:
+        post.pop("_recency_rank", None)
+
+    print(f"\n   ✅ Selected top {len(top_rss_posts)} trending RSS posts")
+
+    # ========== PART 2: Get 3 Viral Posts from Search ==========
+    print(f"\n🔥 PART 2: Fetching top 3 viral posts from search...")
+
+    viral_posts = []
+    try:
+        viral_items = search_viral_news(max_results=TARGET_VIRAL_POSTS)
+
+        # Transform viral search results into post format
+        for idx, viral_item in enumerate(viral_items, 1):
+            try:
+                # Create a pseudo news item for transformation
+                pseudo_item = {
+                    "title": viral_item.get("title", ""),
+                    "description_5line": viral_item.get("description", ""),
+                    "full_text": viral_item.get("description", ""),
+                    "source": viral_item.get("source", "Social Media Trends"),
+                    "published_at": "",
+                    "url": "",
+                    "top_image_url": ""
+                }
+
+                transformed = call_chatgpt_on_news(pseudo_item)
+
+                # Override category from viral search if available
+                if viral_item.get("category"):
+                    transformed["category"] = viral_item["category"]
+
+                transformed["article_image_url"] = ""
+                transformed["article_url"] = ""
+                transformed["_viral_score"] = viral_item.get("viral_score", 50)
+
+                viral_posts.append(transformed)
+                print(f"     ✅ [{idx}/{len(viral_items)}] [Score: {viral_item.get('viral_score', 0)}] {transformed.get('title', '')[:60]}...")
+
+            except Exception as e:
+                print(f"     ⚠️ [{idx}/{len(viral_items)}] ERROR transforming viral post: {e}")
+                continue
+
+            time.sleep(0.8)  # Polite pause
+
+    except Exception as e:
+        print(f"   ⚠️ ERROR in viral search: {e}")
+        print(f"   Falling back to more RSS posts to maintain count...")
+
+        # Fallback: use more RSS posts if viral search fails
+        additional_needed = TARGET_VIRAL_POSTS - len(viral_posts)
+        if additional_needed > 0 and len(transformed_rss) > TARGET_RSS_POSTS:
+            fallback_posts = transformed_rss[TARGET_RSS_POSTS:TARGET_RSS_POSTS + additional_needed]
+            for post in fallback_posts:
+                post.pop("_recency_rank", None)
+            top_rss_posts.extend(fallback_posts)
+
+    # Remove viral score from final output
+    for post in viral_posts:
+        post.pop("_viral_score", None)
+
+    print(f"\n   ✅ Generated {len(viral_posts)} viral posts from search")
+
+    # ========== PART 3: Combine and Return ==========
+    final_posts = top_rss_posts + viral_posts
+
+    print(f"\n" + "="*60)
+    print(f"🎯 FINAL SELECTION: {len(final_posts)} posts ready")
+    print(f"   📰 RSS Posts: {len(top_rss_posts)}")
+    print(f"   🔥 Viral Posts: {len(viral_posts)}")
+    print(f"="*60)
+
+    return final_posts
 
 
 
