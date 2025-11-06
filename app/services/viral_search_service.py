@@ -1,238 +1,250 @@
 """
-Viral News Search Service
-Uses Perplexity API to discover trending, controversial, and viral-worthy news
+Viral News Discovery Service - OpenAI Only
+Uses OpenAI to score and select viral-worthy news from diverse RSS feeds
+No additional API costs - uses your existing OpenAI key!
 """
 
 import logging
 import time
-from typing import List, Dict, Any
-from app.config import PPLX_API_KEY, PERPLEXITY_MODEL
-from app.services.perplexity_service import call_perplexity, extract_text
 import json
+from typing import List, Dict, Any
+from openai import OpenAI
+import os
 import re
 
 logger = logging.getLogger(__name__)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-def search_viral_news(max_results: int = 3) -> List[Dict[str, Any]]:
+# Expanded RSS feeds for viral content discovery
+VIRAL_RSS_FEEDS = {
+    # Social/Trending News
+    "trending": [
+        "https://timesofindia.indiatimes.com/rss.cms",
+        "https://www.hindustantimes.com/rss/trending/rssfeed.xml",
+        "https://www.indiatoday.in/rss/home",
+    ],
+
+    # Politics & Controversy (high viral potential)
+    "politics": [
+        "https://www.thehindu.com/news/national/feeder/default.rss",
+        "https://indianexpress.com/section/india/feed/",
+        "https://www.ndtv.com/india/rss",
+    ],
+
+    # Cricket (huge engagement in India)
+    "cricket": [
+        "https://www.espncricinfo.com/ci/content/rss/feeds/0.xml",
+        "https://www.cricbuzz.com/cricket/rss",
+        "https://timesofindia.indiatimes.com/rss.cms?sectionId=4719148",
+    ],
+
+    # Bollywood/Entertainment (high shareability)
+    "entertainment": [
+        "https://www.bollywoodhungama.com/rss-feed/",
+        "https://www.pinkvilla.com/rss",
+        "https://indianexpress.com/section/entertainment/feed/",
+    ],
+
+    # Markets/Money (₹ triggers engagement)
+    "markets": [
+        "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+        "https://www.livemint.com/rss/markets",
+        "https://www.moneycontrol.com/rss/MCtopnews.xml",
+    ],
+}
+
+
+def discover_viral_news(max_results: int = 3) -> List[Dict[str, Any]]:
     """
-    Search for viral-worthy news using Perplexity API with trending queries
+    Discover viral-worthy news using OpenAI to analyze diverse RSS feeds
+
+    Strategy:
+    1. Fetch from diverse RSS categories (politics, cricket, entertainment, etc.)
+    2. Extract 15-20 recent articles
+    3. Use OpenAI to score each for viral potential
+    4. Select top N with highest viral scores
 
     Args:
-        max_results: Maximum number of viral news items to return
+        max_results: Number of viral posts to return
 
     Returns:
-        List of viral news items with viral_score, title, description, source, category
+        List of viral news items with scores
     """
-    logger.info(f"🔥 Searching for viral news (target: {max_results} posts)...")
+    from app.get_rss_feed_data import collect_latest_from_rss, extract_articles_from_links
 
-    # Viral-focused search queries
-    search_queries = [
-        "What's trending on Twitter India right now today most viral controversial",
-        "Most controversial political news India today angry people reactions",
-        "Shocking news India today that went viral social media",
-        "Reddit India hot discussions trending topics past 12 hours",
-        "Indian cricket latest controversy drama news today viral",
-        "Bollywood breaking scandal gossip trending social media India today",
-        "Stock market crash rise shocking India today investors reactions",
-        "Unpopular opinion trending India social media today hot takes"
-    ]
+    logger.info(f"🔥 Discovering viral news using OpenAI (target: {max_results} posts)...")
 
-    all_viral_candidates = []
+    # Step 1: Collect diverse RSS articles
+    print(f"   📰 Fetching from {len(VIRAL_RSS_FEEDS)} diverse RSS categories...")
 
-    # Execute searches and collect results
-    for idx, query in enumerate(search_queries[:6], 1):  # Limit to 6 searches to control cost
+    all_rss_items = []
+    for category, feeds in VIRAL_RSS_FEEDS.items():
         try:
-            logger.info(f"  🔍 Query {idx}/6: {query[:60]}...")
-
-            # Call Perplexity with viral-focused prompt
-            result = call_perplexity(
-                prompt=f"""{query}
-
-Requirements:
-- Only news from past 12 hours
-- Focus on viral/trending/controversial stories
-- Include social media reaction context
-- Provide 1-2 specific news items with:
-  * Title
-  * Brief description (2-3 sentences)
-  * Why it's viral/trending
-  * Source
-  * Category (politics/cricket/bollywood/economy/tech/world)
-
-Format as JSON array:
-[
-  {{
-    "title": "...",
-    "description": "...",
-    "viral_reason": "...",
-    "source": "...",
-    "category": "politics|cricket|bollywood|economy|tech|world"
-  }}
-]
-""",
-                model=PERPLEXITY_MODEL,
-                retries=2,
-                timeout=45
+            items = collect_latest_from_rss(
+                feeds_map={category: feeds},
+                max_per_feed=2,  # 2 items per category
+                hours_window=12,
+                try_fetch_missing_ts=True,
+                debug=False
             )
-
-            if result:
-                text = extract_text(result)
-                parsed_items = _parse_viral_response(text)
-
-                if parsed_items:
-                    logger.info(f"    ✅ Found {len(parsed_items)} viral candidates")
-                    all_viral_candidates.extend(parsed_items)
-                else:
-                    logger.info(f"    ⚠️ No items parsed from response")
-            else:
-                logger.warning(f"    ⚠️ No result from query")
-
-            # Polite rate limiting
-            time.sleep(1.5)
-
+            all_rss_items.extend(items)
+            print(f"      ✓ {category}: {len(items)} articles")
         except Exception as e:
-            logger.error(f"    ❌ Error in query {idx}: {e}")
+            logger.warning(f"      ⚠️ {category} failed: {e}")
             continue
 
-    logger.info(f"\n📊 Total viral candidates collected: {len(all_viral_candidates)}")
+    print(f"   📊 Collected {len(all_rss_items)} total articles from RSS")
 
-    # Score and rank viral potential
-    scored_candidates = []
-    for item in all_viral_candidates:
-        score = _calculate_viral_score(item)
-        item['viral_score'] = score
-        scored_candidates.append(item)
+    if len(all_rss_items) < 5:
+        logger.warning(f"   ⚠️ Only {len(all_rss_items)} articles found, may not be enough")
+        return []
 
-    # Sort by viral score (highest first) and deduplicate
-    scored_candidates.sort(key=lambda x: x['viral_score'], reverse=True)
+    # Step 2: Extract article content (limit to 15 for speed/cost)
+    urls = []
+    seen = set()
+    for item in all_rss_items:
+        url = item.get("url", "").rstrip("/")
+        if url and url not in seen:
+            urls.append(url)
+            seen.add(url)
+            if len(urls) >= 15:  # Limit to 15 articles max
+                break
+
+    print(f"   🔗 Extracting full content from {len(urls)} articles...")
+
+    try:
+        extracted_articles = extract_articles_from_links(urls, debug=False)
+        print(f"   ✅ Extracted {len(extracted_articles)} articles")
+    except Exception as e:
+        logger.error(f"   ❌ Extraction failed: {e}")
+        return []
+
+    if len(extracted_articles) < 3:
+        logger.warning(f"   ⚠️ Only {len(extracted_articles)} articles extracted")
+        return []
+
+    # Step 3: Use OpenAI to score each article for viral potential
+    print(f"   🤖 Analyzing viral potential with OpenAI...")
+
+    viral_candidates = []
+    for idx, article in enumerate(extracted_articles, 1):
+        try:
+            # Score article using OpenAI
+            viral_analysis = _score_viral_potential_with_openai(article)
+
+            if viral_analysis and viral_analysis.get("viral_score", 0) >= 60:
+                viral_candidates.append({
+                    "title": article.get("title", "")[:200],
+                    "description": article.get("description_5line", "")[:500],
+                    "viral_score": viral_analysis.get("viral_score", 0),
+                    "viral_reason": viral_analysis.get("viral_reason", ""),
+                    "category": viral_analysis.get("category", "general"),
+                    "source": article.get("source", "RSS Feeds"),
+                    "article_url": article.get("url", ""),
+                    "article_image_url": article.get("top_image_url", "")
+                })
+
+                print(f"      ✅ [{idx}/{len(extracted_articles)}] Score {viral_analysis['viral_score']}/100: {article.get('title', '')[:55]}...")
+            else:
+                score = viral_analysis.get("viral_score", 0) if viral_analysis else 0
+                print(f"      ❌ [{idx}/{len(extracted_articles)}] Score {score}/100: Low viral potential")
+
+            time.sleep(0.5)  # Rate limiting
+
+        except Exception as e:
+            logger.warning(f"      ⚠️ [{idx}] Error scoring article: {e}")
+            continue
+
+    print(f"\n   📊 Found {len(viral_candidates)} viral-worthy articles (score >= 60)")
+
+    # Step 4: Sort by viral score and return top N
+    viral_candidates.sort(key=lambda x: x['viral_score'], reverse=True)
 
     # Deduplicate by title similarity
-    unique_items = _deduplicate_by_title(scored_candidates)
+    unique_viral = _deduplicate_by_title(viral_candidates)
 
-    # Return top N with highest viral scores
-    top_viral = unique_items[:max_results]
+    top_viral = unique_viral[:max_results]
 
-    logger.info(f"🎯 Selected {len(top_viral)} top viral stories:")
+    print(f"   🎯 Selected top {len(top_viral)} viral stories:\n")
     for idx, item in enumerate(top_viral, 1):
-        logger.info(f"  {idx}. [{item['viral_score']}/100] {item.get('title', '')[:70]}...")
+        print(f"      {idx}. [{item['viral_score']}/100] {item['title'][:60]}...")
 
     return top_viral
 
 
-def _parse_viral_response(text: str) -> List[Dict[str, Any]]:
+def _score_viral_potential_with_openai(article: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Parse Perplexity response to extract viral news items
-    Handles both JSON and text formats
-    """
-    items = []
+    Use OpenAI to analyze article and score its viral potential
 
-    # Try JSON parsing first
+    Returns:
+        {
+            "viral_score": 0-100,
+            "viral_reason": "Why this could go viral",
+            "category": "politics|cricket|bollywood|economy|tech|world"
+        }
+    """
+
+    # Prepare article summary for analysis
+    title = article.get("title", "")
+    description = article.get("description_5line", article.get("full_text", ""))[:800]
+
+    prompt = f"""Analyze this news article for VIRAL POTENTIAL on Indian social media (Instagram, Twitter, Facebook).
+
+NEWS:
+Title: {title}
+Description: {description}
+
+VIRAL SCORING CRITERIA (score 0-100):
+- Controversy/Scandal: Does it involve conflict, scandal, outrage, backlash? (+30)
+- Emotional Trigger: Anger, shock, joy, pride, humor? (+25)
+- Celebrity/Sports/Politics: Involves famous people (Virat Kohli, Modi, Shah Rukh Khan, etc.)? (+20)
+- Money/Numbers: Mentions ₹ amounts, percentages, dramatic figures? (+15)
+- Shareability: Would people share this to express their opinion? (+10)
+
+PENALTIES:
+- Boring/routine news (meetings, statements, generic announcements): -30
+- Too complex/technical: -20
+
+Respond with JSON only:
+{{
+  "viral_score": 0-100,
+  "viral_reason": "1-2 sentence explanation of why this is/isn't viral-worthy",
+  "category": "politics|cricket|bollywood|economy|tech|world|breaking",
+  "controversy_level": "high|medium|low",
+  "emotion": "anger|shock|joy|pride|humor|neutral"
+}}
+
+Examples:
+HIGH SCORE (85+): "Virat Kohli dropped from T20 squad—BCCI faces backlash" → Controversy + Celebrity + Emotion
+LOW SCORE (30-): "Finance Minister announces new committee meeting" → Boring + No emotion"""
+
     try:
-        # Look for JSON array in the text
-        json_match = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
-        if json_match:
-            parsed = json.loads(json_match.group(0))
-            if isinstance(parsed, list):
-                return [item for item in parsed if isinstance(item, dict) and item.get('title')]
-    except json.JSONDecodeError:
-        pass
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a viral content analyzer for Indian social media. Score news objectively for viral potential."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200,
+            temperature=0.3
+        )
 
-    # Fallback: try to parse text format
-    # Look for patterns like "Title:", "Description:", etc.
-    sections = re.split(r'\n\s*\n+', text)
-    current_item = {}
+        content = response.choices[0].message.content.strip()
 
-    for section in sections:
-        lines = section.strip().split('\n')
-        for line in lines:
-            line = line.strip()
+        # Parse JSON response
+        if content.startswith("```"):
+            content = "\n".join(line for line in content.splitlines() if not line.strip().startswith("```"))
 
-            # Match key-value patterns
-            if ':' in line:
-                parts = line.split(':', 1)
-                key = parts[0].strip().lower()
-                value = parts[1].strip() if len(parts) > 1 else ''
+        result = json.loads(content)
+        return result
 
-                if 'title' in key and value:
-                    if current_item:  # Save previous item
-                        items.append(current_item)
-                    current_item = {'title': value}
-                elif 'description' in key and value:
-                    current_item['description'] = value
-                elif 'viral' in key or 'trending' in key or 'reason' in key:
-                    current_item['viral_reason'] = value
-                elif 'source' in key and value:
-                    current_item['source'] = value
-                elif 'category' in key and value:
-                    current_item['category'] = value.lower()
-
-    if current_item and current_item.get('title'):
-        items.append(current_item)
-
-    # If still no items, try extracting from general text
-    if not items and len(text) > 50:
-        # Extract first meaningful paragraph as a news item
-        paragraphs = [p.strip() for p in text.split('\n\n') if len(p.strip()) > 100]
-        if paragraphs:
-            items.append({
-                'title': paragraphs[0][:200],
-                'description': paragraphs[0] if len(paragraphs) == 1 else paragraphs[1][:500],
-                'viral_reason': 'Trending search result',
-                'source': 'Multiple sources',
-                'category': 'general'
-            })
-
-    return items
-
-
-def _calculate_viral_score(item: Dict[str, Any]) -> int:
-    """
-    Calculate viral potential score (0-100) based on multiple factors
-    """
-    score = 50  # Base score
-
-    title = (item.get('title', '') + ' ' + item.get('description', '')).lower()
-    viral_reason = item.get('viral_reason', '').lower()
-
-    # Controversy indicators (+20)
-    controversy_words = ['shocking', 'controversial', 'scandal', 'outrage', 'viral', 'trending',
-                         'angry', 'protest', 'backlash', 'slammed', 'criticized', 'drama']
-    if any(word in title or word in viral_reason for word in controversy_words):
-        score += 20
-
-    # Emotion triggers (+15)
-    emotion_words = ['shock', 'anger', 'fury', 'rage', 'amazing', 'incredible', 'stunning',
-                     'unbelievable', 'insane', 'wild', 'crazy']
-    if any(word in title for word in emotion_words):
-        score += 15
-
-    # Numbers/data points (+10)
-    if re.search(r'₹|crore|lakh|\d+%|\d+cr|\d+L', title):
-        score += 10
-
-    # Social proof (+15)
-    social_words = ['twitter', 'reddit', 'viral', 'trending', 'social media', 'reactions', 'netizens']
-    if any(word in title or word in viral_reason for word in social_words):
-        score += 15
-
-    # Celebrity/Cricket/Politics (high engagement categories) (+10)
-    high_engagement = ['virat', 'dhoni', 'rohit', 'modi', 'rahul gandhi', 'shah rukh',
-                       'salman', 'rbi', 'bcci', 'ipl', 'bollywood']
-    if any(name in title for name in high_engagement):
-        score += 10
-
-    # Negative score for boring words (-20)
-    boring_words = ['meeting', 'conference', 'statement', 'announces', 'inaugurates']
-    if any(word in title for word in boring_words):
-        score -= 20
-
-    # Has viral reason (+10)
-    if item.get('viral_reason') and len(item['viral_reason']) > 10:
-        score += 10
-
-    # Clamp score between 0-100
-    return max(0, min(100, score))
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSON parse error: {e}, content: {content[:100]}")
+        return {"viral_score": 0, "viral_reason": "Parse error", "category": "general"}
+    except Exception as e:
+        logger.error(f"OpenAI API error: {e}")
+        return {"viral_score": 0, "viral_reason": "API error", "category": "general"}
 
 
 def _deduplicate_by_title(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

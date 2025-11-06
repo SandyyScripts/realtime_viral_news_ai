@@ -70,17 +70,17 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
 
     Strategy:
       - 2 from trending RSS feeds (verified news sources)
-      - 3 from viral search (Perplexity API - trending/controversial content)
+      - 3 from viral discovery (OpenAI analyzes diverse RSS for viral potential)
       = 5 posts total
     """
-    from app.services.viral_search_service import search_viral_news
+    from app.services.viral_search_service import discover_viral_news
 
     TARGET_RSS_POSTS = 2     # Top 2 trending from RSS
     TARGET_VIRAL_POSTS = 3   # Top 3 viral from search
     TARGET_TOTAL = 5         # Total posts to return
     HOURS_WINDOW = 12        # Wider window to ensure we get content
 
-    print(f"\n🔍 Starting HYBRID news curation (2 RSS + 3 Viral Search = 5 total)...")
+    print(f"\n🔍 Starting HYBRID news curation (2 RSS + 3 Viral Discovery = 5 total)...")
 
     # ========== PART 1: Get 2 Trending RSS Posts ==========
     print(f"\n📰 PART 1: Fetching top 2 trending RSS posts...")
@@ -183,12 +183,12 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
 
     print(f"\n   ✅ Selected top {len(top_rss_posts)} trending RSS posts")
 
-    # ========== PART 2: Get 3 Viral Posts from Search ==========
-    print(f"\n🔥 PART 2: Fetching top 3 viral posts from search...")
+    # ========== PART 2: Get 3 Viral Posts using OpenAI Analysis ==========
+    print(f"\n🔥 PART 2: Discovering top 3 viral posts using OpenAI...")
 
     viral_posts = []
     try:
-        viral_items = search_viral_news(max_results=TARGET_VIRAL_POSTS)
+        viral_items = discover_viral_news(max_results=TARGET_VIRAL_POSTS)
 
         # Transform viral search results into post format
         for idx, viral_item in enumerate(viral_items, 1):
@@ -224,7 +224,7 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
             time.sleep(0.8)  # Polite pause
 
     except Exception as e:
-        print(f"   ⚠️ ERROR in viral search: {e}")
+        print(f"   ⚠️ ERROR in viral discovery: {e}")
         print(f"   Falling back to more RSS posts to maintain count...")
 
         # Fallback: use more RSS posts if viral search fails
@@ -239,7 +239,7 @@ def transform_rss_with_perplexity() -> List[Dict[str, Any]]:
     for post in viral_posts:
         post.pop("_viral_score", None)
 
-    print(f"\n   ✅ Generated {len(viral_posts)} viral posts from search")
+    print(f"\n   ✅ Discovered {len(viral_posts)} viral posts using OpenAI")
 
     # ========== PART 3: Combine and Return ==========
     final_posts = top_rss_posts + viral_posts
