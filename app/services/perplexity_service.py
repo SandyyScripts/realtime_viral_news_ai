@@ -188,26 +188,22 @@ Use: ₹/crore/lakh, Indian cities/people
 ✅ "Shock: EMI jumps ₹2,400/month—RBI move hits 4cr borrowers"
 ❌ "Government Announces Policy" (boring)
 
-=== 2. AI POINT (50-70 words) ===
-WRITE LIKE A FAMOUS INDIAN JOURNALIST explaining news to common people over chai.
+=== 2. AI POINT (25-35 words) ===
+CRISP & TO THE POINT - One punchy insight like a senior journalist's quick take.
 
-CRITICAL: For statement/controversy news, QUOTE THE EXACT STATEMENT from the article.
+STRUCTURE (NO labels):
+- What happened + real impact with numbers
+- One sharp insight media won't tell
 
-FLOW NATURALLY (don't use labels like [CONTEXT] or [TAKE]):
-- What happened (1-2 lines, simple)
-- Who's affected + real impact with numbers/facts
-- What mainstream media isn't highlighting
-- Your unbiased analysis as senior journalist
+Include exact quotes/numbers when available. Be direct, skip fluff.
 
-RAW NEWS TOUCH: Include exact quotes, actual numbers, real statements when available.
+✅ "RBI hiked rates 0.25%—₹50L home loan EMI up ₹2,400/month. Real talk: Banks earn ₹18,000cr extra while 4cr borrowers pay more."
 
-✅ "RBI raised rates 0.25%—your ₹50L home loan EMI jumps ₹2,400/month. 4cr borrowers feeling the pinch to control inflation. Here's what they won't tell you: banks will earn ₹18,000cr extra annually while common man pays. My take: Necessary for long-term stability, yes, but why do citizens always bear the burden while bank profits soar?"
+✅ "Amit Shah: 'Surgical strikes sent clear message to Pakistan.' Real story: 200 strikes happened pre-2014, branding changed narrative."
 
-✅ "Amit Shah said 'surgical strikes sent a clear message to Pakistan'—this statement sparked massive debate in Parliament. Opposition claims credit for policy continuity since 2008, government says execution matters. Real story: 200 surgical strikes happened pre-2014, but branding changed the narrative. Unbiased take: Both sides politicizing military operations isn't healthy for national security discourse."
+✅ "Virat dropped from T20. BCCI's ₹15cr dilemma: loyalty vs youth. Right call, but fans deserve selection transparency after 15 years."
 
-✅ "Virat dropped from T20 after poor form. Captain with most wins now sidelined. BCCI facing ₹15cr salary dilemma vs investing in youth like Gill and Jaiswal. My view: Tough but right call—every legend's era ends, but selection transparency needed for fans who've supported him 15 years."
-
-❌ "Many people will be affected. This is an important decision. We'll have to wait and see." (lazy, no insight, no quotes)
+❌ "Many people will be affected. This is an important decision." (lazy, wordy, no insight)
 
 === 3. HASHTAGS (5 total) ===
 ALWAYS start with: #TheAIPoint
